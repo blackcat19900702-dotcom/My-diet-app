@@ -65,3 +65,65 @@ tabs = st.tabs(["🍚 主食", "🥩 肉類", "🥦 蔬菜", "🧂 醬料"])
 with tabs[0]:
     c_name = st.selectbox("來源", list(db_carbs.keys()))
     c_w = st.number_input(f"{c_name} 克數(g)", min_value=0.0, step=1.0)
+    if st.button("➕ 加入主食"):
+        st.session_state.daily_total_kcal += (c_w * db_carbs[c_name])
+        st.toast(f"已計入 {c_name}")
+
+with tabs[1]:
+    m_type = st.selectbox("種類", list(meat_parts.keys()), index=1)
+    part = st.selectbox("部位", meat_parts[m_type])
+    base_k = base_kcal_map.get(part, 1.5)
+    if part == "雞腿肉":
+        skin = st.radio("處理", ["去皮", "帶皮"], horizontal=True)
+        base_k = 1.2 if skin == "去皮" else 1.9
+    method = st.selectbox("料理方式", list(method_map.keys()))
+    source = st.radio("來源", ["自煮", "外食(+35%油)"], horizontal=True)
+    m_w = st.number_input(f"{part} 克數(g)", min_value=0.0, step=1.0)
+    if st.button("➕ 加入肉類"):
+        kcal = base_k * method_map[method] * m_w * (1.35 if "外食" in source else 1.0)
+        st.session_state.daily_total_kcal += kcal
+        st.toast(f"已計入 {part}")
+
+with tabs[2]:
+    v_name = st.selectbox("蔬菜", list(db_veggie.keys()))
+    v_method = st.selectbox("料理 ", list(method_map.keys()), key="v_method")
+    v_w = st.number_input(f"{v_name} 克數(g) ", min_value=0.0, step=1.0, key="v_weight")
+    if st.button("➕ 加入蔬菜"):
+        st.session_state.daily_total_kcal += (v_w * db_veggie[v_name] * method_map[v_method])
+        st.toast(f"已計入 {v_name}")
+
+with tabs[3]:
+    s_name = st.selectbox("醬料", list(db_sauce.keys()) + ["自定義"])
+    s_w = st.number_input("份量(g/ml)", min_value=0.0, step=1.0)
+    if st.button("➕ 加入醬料"):
+        st.session_state.daily_total_kcal += (s_w * db_sauce.get(s_name, 0.5))
+
+# --- 4. 數據同步 (與 Google Sheets 對接) ---
+st.divider()
+st.subheader(f"🔥 今日累計攝取：{st.session_state.daily_total_kcal:.1f} kcal")
+
+# 這裡請貼入你剛才測試成功的那串 /exec 網址
+script_url = "https://script.google.com/macros/s/AKfycbyJJwrjQaIbVao0R5tqtS7l2mKLHifrU8O4ylwwG4yrmuyJZPna_clLAZLeAUkwUcXJ7A/exec"
+
+if st.button("🚀 數據直接入庫 (不跳轉)", use_container_width=True):
+    payload = {
+        "date": record_date.strftime('%Y-%m-%d'),
+        "weight": weight, 
+        "body_fat": body_fat, 
+        "visceral": visceral,
+        "waist": waist, 
+        "hip": hip, 
+        "sleep": sleep_info,
+        "water": water, 
+        "steps": steps, 
+        "kcal": round(st.session_state.daily_total_kcal, 1)
+    }
+    try:
+        response = requests.get(script_url, params=payload, timeout=10)
+        if response.status_code == 200:
+            st.success(f"✅ Excel 錄入成功！Google 回報：{response.text}")
+            st.balloons()
+        else:
+            st.error(f"❌ 同步失敗，代碼：{response.status_code}")
+    except Exception as e:
+        st.error(f"❌ 連線異常：{e}")
