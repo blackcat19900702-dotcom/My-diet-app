@@ -1,59 +1,83 @@
 import streamlit as st
 
-st.set_page_config(page_title="35% 終結者：主食快捷版", page_icon="🍚")
+st.set_page_config(page_title="內脂終結者：多食材版", page_icon="🥗")
 
-# --- 營養師專屬主食資料庫 ---
+# --- 資料庫設定 ---
 dietitian_carbs = {
     "🍚 白米飯 (240g)": 336.0,
-    "🌾 五穀混合米 (240g)": 315.0,
-    "🍜 熟麵條 (300g)": 345.0,
-    "✏️ 手動輸入其他": 0.0
+    "🌾 白米混合五穀米 (240g)": 320.0,
+    "🍜 煮過白麵條 (300g)": 345.0,
+    "🚫 不吃主食": 0.0
 }
+protein_db = {"雞胸肉": 1.1, "雞肉": 1.6, "鮭魚": 2.1, "牛肉": 2.5, "雞蛋": 1.4, "豆腐": 0.8}
+veggie_db = {"櫛瓜": 0.17, "青菜": 0.2, "高麗菜": 0.25, "花椰菜": 0.3, "地瓜葉": 0.25}
+method_map = {"水煮/清蒸": 1.0, "滷/燉": 1.1, "乾煎": 1.25, "油炒": 1.4, "油炸": 1.8}
 
-# --- 基礎食材資料庫 (每克大卡) ---
-base_kcal = {
-    "櫛瓜": 0.17, "青菜": 0.2, "雞胸肉": 1.1, "雞肉": 1.6, "鮭魚": 2.1, "橄欖油": 9.0
-}
+# 初始化暫存清單 (Session State)
+if 'meal_list' not in st.session_state:
+    st.session_state.meal_list = []
 
-st.error("📉 當前目標：內臟脂肪 18 | 穩定控糖")
-st.title("⚖️ 精準飲食計算機")
+st.error("📉 內臟脂肪 18 嚴格監控中 | 多樣化飲食紀錄")
+st.title("⚖️ 精準飲食紀錄器")
 
-# --- 第一區：主食快捷區 ---
-st.subheader("1. 選擇主食 (營養師建議量)")
-carb_choice = st.selectbox("今天的主食是？", list(dietitian_carbs.keys()))
+# --- 第一區：主食 ---
+st.header("1. 選擇主食")
+carb_choice = st.selectbox("主食選項：", list(dietitian_carbs.keys()))
 
-if carb_choice == "✏️ 手動輸入其他":
-    custom_carb = st.number_input("輸入主食熱量 (kcal)", min_value=0.0, value=0.0)
-    carb_kcal = custom_carb
-else:
-    carb_kcal = dietitian_carbs[carb_choice]
-    st.info(f"💡 已自動設定熱量：{carb_kcal} kcal")
-
-# --- 第二區：配菜自由計算 ---
+# --- 第二區：添加食材 (肉/菜) ---
 st.divider()
-st.subheader("2. 紀錄配菜 (依重量與煮法)")
+st.header("2. 添加配菜 (可多次添加)")
 
-source = st.radio("配菜來源：", ["🏠 自煮", "🥡 外食 (+35% 隱形油)"])
+source = st.radio("來源：", ["🏠 自煮", "🥡 外食 (+35%)"])
+risk_mult = 1.35 if source == "🥡 外食 (+35%)" else 1.0
 
+cat = st.selectbox("食材類別：", ["🥩 蛋白質/肉類", "🥦 青菜/纖維"])
 col1, col2 = st.columns(2)
 with col1:
-    user_food = st.text_input("食材 (如：雞肉)", "櫛瓜")
+    f_name = st.text_input("食材名稱", "雞肉" if cat == "🥩 蛋白質/肉類" else "青菜")
 with col2:
-    user_method = st.selectbox("料理方式", ["水煮/清蒸", "滷/燉", "乾煎", "油炒", "油炸"])
+    f_method = st.selectbox("料理方式", list(method_map.keys()))
 
-user_weight = st.number_input("重量 (g)", min_value=0.0, value=100.0)
+f_weight = st.number_input("重量 (g)", min_value=0.0, value=100.0, step=10.0)
 
-# 計算配菜熱量
-method_map = {"水煮/清蒸": 1.0, "滷/燉": 1.1, "乾煎": 1.25, "油炒": 1.4, "油炸": 1.8}
-risk_mult = 1.35 if source == "🥡 外食 (+35% 隱形油)" else 1.0
-side_kcal = base_kcal.get(user_food, 0.6) * method_map[user_method] * user_weight * risk_mult
+if st.button("➕ 加入這項食材"):
+    # 根據類別抓取基礎熱量
+    db = protein_db if cat == "🥩 蛋白質/肉類" else veggie_db
+    base = db.get(f_name, 1.5 if cat == "🥩 蛋白質/肉類" else 0.2)
+    kcal = base * method_map[f_method] * f_weight * risk_mult
+    
+    # 存入清單
+    st.session_state.meal_list.append({
+        "名稱": f"{cat} - {f_name}({f_method})",
+        "重量": f"{f_weight}g",
+        "熱量": round(kcal, 1)
+    })
+    st.toast(f"已加入 {f_name}")
 
-# --- 第三區：總和 ---
+# --- 第三區：本餐清單與總結 ---
 st.divider()
-total_all = carb_kcal + side_kcal
-st.metric("🔥 本餐預估總熱量", f"{total_all:.1f} kcal")
+st.header("📋 本餐清單")
 
-if st.button("確認紀錄", use_container_width=True):
-    st.success(f"紀錄成功！主食 {carb_kcal} + 配菜 {side_kcal:.1f} = {total_all:.1f} kcal")
-    if carb_choice == "🌾 五穀混合米 (240g)":
-        st.write("✨ 五穀米對降低內脂非常有幫助，繼續保持！")
+if st.session_state.meal_list:
+    for item in st.session_state.meal_list:
+        st.write(f"· {item['名稱']} | {item['重量']} -> **{item['熱量']} kcal**")
+    
+    if st.button("🗑️ 清空重來"):
+        st.session_state.meal_list = []
+        st.rerun()
+else:
+    st.info("目前還沒有加入配菜喔！")
+
+# 總和計算
+side_total = sum(item['熱量'] for item in st.session_state.meal_list)
+final_total = dietitian_carbs[carb_choice] + side_total
+
+st.divider()
+c1, c2 = st.columns(2)
+c1.metric("主食熱量", f"{dietitian_carbs[carb_choice]} kcal")
+c2.metric("配菜總計", f"{side_total:.1f} kcal")
+st.metric("🔥 這一餐總共攝取", f"{final_total:.1f} kcal")
+
+if st.button("✅ 確認這就是我吃的所有東西", use_container_width=True):
+    st.balloons()
+    st.success(f"紀錄完成！今日內脂戰鬥力 +1")
