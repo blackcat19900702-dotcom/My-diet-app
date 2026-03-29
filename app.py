@@ -92,7 +92,7 @@ st.divider()
 st.subheader(f"🔥 今日累計攝取：{st.session_state.daily_total_kcal:.1f} kcal")
 
 # ❗ 請將下方換成你剛剛在 Apps Script 部署後的網址
-script_url = "這裡貼上你的網頁應用程式網址"
+script_url = "https://script.google.com/macros/s/AKfycbyJJwrjQaIbVao0R5tqtS7l2mKLHifrU8O4ylwwG4yrmuyJZPna_clLAZLeAUkwUcXJ7A/exec"
 
 if st.button("🚀 數據直接入庫 (不跳轉)", use_container_width=True):
     payload = {
