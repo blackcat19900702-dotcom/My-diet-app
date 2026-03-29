@@ -1,48 +1,59 @@
 import streamlit as st
 
-st.set_page_config(page_title="35% 終結者：精準版", page_icon="⚖️")
+st.set_page_config(page_title="35% 終結者：主食快捷版", page_icon="🍚")
 
-# --- 修正後的精準資料庫 (每克大卡) ---
+# --- 營養師專屬主食資料庫 ---
+dietitian_carbs = {
+    "🍚 白米飯 (240g)": 336.0,
+    "🌾 五穀混合米 (240g)": 315.0,
+    "🍜 熟麵條 (300g)": 345.0,
+    "✏️ 手動輸入其他": 0.0
+}
+
+# --- 基礎食材資料庫 (每克大卡) ---
 base_kcal = {
-    "櫛瓜": 0.2, "青菜": 0.15, "高麗菜": 0.25, "花椰菜": 0.3, # 蔬菜類
-    "白飯": 1.4, "地瓜": 1.2, "馬鈴薯": 0.8,              # 澱粉類
-    "雞胸肉": 1.1, "雞腿": 1.6, "鮭魚": 2.1, "牛肉": 2.5,  # 蛋白質類
-    "雞蛋": 1.4, "豆腐": 0.8, "優酪乳": 0.9, "橄欖油": 9.0  # 其他
+    "櫛瓜": 0.17, "青菜": 0.2, "雞胸肉": 1.1, "雞肉": 1.6, "鮭魚": 2.1, "橄欖油": 9.0
 }
 
-# 料理方式加權
-method_weight = {
-    "水煮/清蒸": 1.0, "滷": 1.05, "氣炸": 1.1, 
-    "乾煎": 1.2, "油炒": 1.3, "油炸": 1.7
-}
+st.error("📉 當前目標：內臟脂肪 18 | 穩定控糖")
+st.title("⚖️ 精準飲食計算機")
 
-st.error("📉 目標：內臟脂肪 18 -> 嚴格控管油脂")
-st.title("⚖️ 精準飲食計算機 (修正版)")
+# --- 第一區：主食快捷區 ---
+st.subheader("1. 選擇主食 (營養師建議量)")
+carb_choice = st.selectbox("今天的主食是？", list(dietitian_carbs.keys()))
+
+if carb_choice == "✏️ 手動輸入其他":
+    custom_carb = st.number_input("輸入主食熱量 (kcal)", min_value=0.0, value=0.0)
+    carb_kcal = custom_carb
+else:
+    carb_kcal = dietitian_carbs[carb_choice]
+    st.info(f"💡 已自動設定熱量：{carb_kcal} kcal")
+
+# --- 第二區：配菜自由計算 ---
+st.divider()
+st.subheader("2. 紀錄配菜 (依重量與煮法)")
+
+source = st.radio("配菜來源：", ["🏠 自煮", "🥡 外食 (+35% 隱形油)"])
 
 col1, col2 = st.columns(2)
 with col1:
-    user_food = st.text_input("1. 輸入食材", "櫛瓜")
+    user_food = st.text_input("食材 (如：雞肉)", "櫛瓜")
 with col2:
-    user_method = st.selectbox("2. 料理方式", list(method_weight.keys()))
+    user_method = st.selectbox("料理方式", ["水煮/清蒸", "滷/燉", "乾煎", "油炒", "油炸"])
 
-user_weight = st.number_input("3. 輸入重量 (克 g)", min_value=0.0, value=100.0, step=10.0)
+user_weight = st.number_input("重量 (g)", min_value=0.0, value=100.0)
 
-# --- 智慧判斷邏輯 (修正預設值) ---
-# 如果找不到食材，預設給 0.6 (大約是瘦肉與蔬菜的平均)，避免跳到 1.5 甚至更高
-found_base = base_kcal.get(user_food, 0.6) 
-weight_factor = method_weight.get(user_method, 1.0)
+# 計算配菜熱量
+method_map = {"水煮/清蒸": 1.0, "滷/燉": 1.1, "乾煎": 1.25, "油炒": 1.4, "油炸": 1.8}
+risk_mult = 1.35 if source == "🥡 外食 (+35% 隱形油)" else 1.0
+side_kcal = base_kcal.get(user_food, 0.6) * method_map[user_method] * user_weight * risk_mult
 
-total_kcal = user_weight * found_base * weight_factor
-
+# --- 第三區：總和 ---
 st.divider()
-st.subheader("計算結果")
-
-c1, c2, c3 = st.columns(3)
-c1.metric("食材基礎", f"{found_base} kcal/g")
-c2.metric("方式加成", f"x{weight_factor}")
-c3.metric("總熱量", f"{total_kcal:.1f} kcal")
+total_all = carb_kcal + side_kcal
+st.metric("🔥 本餐預估總熱量", f"{total_all:.1f} kcal")
 
 if st.button("確認紀錄", use_container_width=True):
-    st.success(f"已紀錄：{user_method}{user_food} {user_weight}g，共 {total_kcal:.1f} kcal")
-    if found_base < 0.4:
-        st.info("🥦 這是優質的低卡蔬菜，對降低內脂非常有幫助！")
+    st.success(f"紀錄成功！主食 {carb_kcal} + 配菜 {side_kcal:.1f} = {total_all:.1f} kcal")
+    if carb_choice == "🌾 五穀混合米 (240g)":
+        st.write("✨ 五穀米對降低內脂非常有幫助，繼續保持！")
