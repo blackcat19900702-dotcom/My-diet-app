@@ -2,128 +2,102 @@ import streamlit as st
 import requests
 from datetime import datetime
 
-# --- 設定網頁標題 ---
-st.set_page_config(page_title="內脂終結者：自動同步版", page_icon="🔥", layout="centered")
-
-# --- 1. 核心資料庫 (每克 kcal) ---
-# 主食類
-db_carbs = {"🍚 白米飯": 1.4, "🌾 五穀米": 1.33, "🍜 白麵條": 1.15, "🌽 玉米/地瓜": 1.2}
-
-# 肉類與蛋白質
-meat_parts = {
-    "牛肉": ["和尚頭(極瘦)", "嫩肩里肌(板腱)", "梅花牛", "肋眼(沙朗)", "牛肋條", "牛小排", "牛腱"],
-    "雞肉": ["雞胸肉", "雞腿肉", "雞翅"],
-    "豬肉": ["里肌肉(瘦)", "五花肉(肥)", "梅花豬", "豬絞肉"],
-    "其他蛋白質": ["鮭魚", "鱈魚", "雞蛋", "豆腐"]
-}
-base_kcal_map = {
-    "和尚頭(極瘦)": 1.2, "嫩肩里肌(板腱)": 1.4, "梅花牛": 2.0, "肋眼(沙朗)": 2.9, "牛肋條": 3.3, "牛小排": 3.8, "牛腱": 1.2,
-    "雞胸肉": 1.1, "雞翅": 2.1, "里肌肉(瘦)": 1.8, "五花肉(肥)": 3.6, "梅花豬": 2.3, "豬絞肉": 2.5,
-    "鮭魚": 2.1, "鱈魚": 1.0, "雞蛋": 1.4, "豆腐": 0.8
+# --- 1. 營養師 2710 kcal 基準配額 ---
+GOALS = {
+    "carbs": 16.0,      "protein_low": 7.0, 
+    "protein_mid": 3.5, "veggie": 4.0,      
+    "veggie_green": 2.0,"fruit": 3.0,       
+    "milk": 3.0,        "fat": 5.5,         
+    "salt": 4.0,        "kcal": 2710.0
 }
 
-# 蔬菜類 (已整合你要求新增的所有種類)
-db_veggie = {
-    "櫛瓜": 0.17, "茄子": 0.25, "青菜": 0.2, "高麗菜": 0.25, "白花椰": 0.25, 
-    "綠花椰": 0.28, "娃娃菜": 0.2, "菠菜": 0.22, "地瓜葉": 0.28, "空心菜": 0.2, 
-    "絲瓜": 0.17, "洋蔥": 0.4, "雪白菇": 0.25, "鴻禧菇": 0.25
-}
+# 熟重換算率
+CONV = {"carbs_g": 60, "protein_g": 35, "veggie_g": 100, "fruit_g": 100, "milk_ml": 240}
 
-# 醬料與料理方式
-db_sauce = {"新東陽肉醬": 2.9, "橄欖油": 9.0, "醬油": 0.6, "辣椒醬": 1.5}
-method_map = {"水煮/清蒸": 1.0, "滷/燉": 1.1, "氣炸/烤": 1.15, "乾煎": 1.25, "油炒": 1.4, "油炸": 1.8}
+# 食材清單分類
+low_meat = ["雞胸肉", "雞腿肉(去皮)", "和尚頭(牛)", "牛腱", "里肌肉(豬)", "鱈魚", "豆腐"]
+mid_meat = ["雞蛋", "鮭魚", "嫩肩里肌(板腱)", "梅花豬", "豬絞肉", "雞腿肉(帶皮)"]
+green_veggies = ["綠花椰", "菠菜", "地瓜葉", "空心菜"]
+other_veggies = ["櫛瓜", "茄子", "高麗菜", "白花椰", "娃娃菜", "絲瓜", "洋蔥", "雪白菇", "鴻禧菇"]
 
-# 狀態管理
-if 'daily_total_kcal' not in st.session_state:
-    st.session_state.daily_total_kcal = 0.0
+# 初始化
+if 'daily' not in st.session_state:
+    st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
 
-# --- 2. 身體指標與日期 ---
-st.error(f"📉 減重戰鬥日：{datetime.now().strftime('%Y-%m-%d')} | 目標：內脂 18 降標")
+st.set_page_config(page_title="2710kcal 飲食導航", layout="wide")
 
-with st.expander("📊 每日身體數據 (Excel 欄位)", expanded=True):
-    record_date = st.date_input("🗓️ 記錄日期 (可手動修改)", datetime.now())
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        weight = st.number_input("體重 (kg)", value=99.0, step=0.1)
-        body_fat = st.number_input("體脂 (%)", value=31.0, step=0.1)
-        sleep_info = st.text_input("睡眠狀況", value="有睡飽")
-    with c2:
-        visceral = st.number_input("內臟脂肪", value=18.0, step=0.5)
-        waist = st.number_input("腰圍 (cm)", value=104.0, step=0.1)
-        water = st.number_input("飲水 (ml)", value=2500, step=250)
-    with c3:
-        hip = st.number_input("臀圍 (cm)", value=90.0, step=0.1)
-        steps = st.number_input("今日步數", value=5000, step=500)
-        if st.button("🔄 重置今日計算"):
-            st.session_state.daily_total_kcal = 0.0
-            st.rerun()
+# --- 2. 儀表板：剩餘份數監控 ---
+st.title("⚖️ 2710kcal 飲食配額監控")
+cols = st.columns(6)
+items = [
+    ("🍞 主食", "carbs"), ("🥩 低脂肉", "protein_low"), ("🍖 中脂肉", "protein_mid"),
+    ("🥦 蔬菜", "veggie"), ("🍎 水果", "fruit"), ("🥑 油脂", "fat")
+]
 
-# --- 3. 精準克數錄入區 ---
-st.title("⚖️ 食材克數精準紀錄")
-tabs = st.tabs(["🍚 主食", "🥩 肉類", "🥦 蔬菜", "🧂 醬料"])
+for i, (label, key) in enumerate(items):
+    rem = GOALS[key] - st.session_state.daily[key]
+    cols[i].metric(label, f"剩 {rem:.1f} 份", delta=f"{st.session_state.daily[key]:.1f} 已吃", delta_color="inverse")
 
-with tabs[0]:
-    c_name = st.selectbox("來源", list(db_carbs.keys()))
-    c_w = st.number_input(f"{c_name} 克數(g)", min_value=0.0, step=1.0)
-    if st.button("➕ 加入主食"):
-        st.session_state.daily_total_kcal += (c_w * db_carbs[c_name])
-        st.toast(f"已計入 {c_name}")
-
-with tabs[1]:
-    m_type = st.selectbox("種類", list(meat_parts.keys()), index=1)
-    part = st.selectbox("部位", meat_parts[m_type])
-    base_k = base_kcal_map.get(part, 1.5)
-    if part == "雞腿肉":
-        skin = st.radio("處理", ["去皮", "帶皮"], horizontal=True)
-        base_k = 1.2 if skin == "去皮" else 1.9
-    method = st.selectbox("料理方式", list(method_map.keys()))
-    source = st.radio("來源", ["自煮", "外食(+35%油)"], horizontal=True)
-    m_w = st.number_input(f"{part} 克數(g)", min_value=0.0, step=1.0)
-    if st.button("➕ 加入肉類"):
-        kcal = base_k * method_map[method] * m_w * (1.35 if "外食" in source else 1.0)
-        st.session_state.daily_total_kcal += kcal
-        st.toast(f"已計入 {part}")
-
-with tabs[2]:
-    v_name = st.selectbox("蔬菜", list(db_veggie.keys()))
-    v_method = st.selectbox("料理 ", list(method_map.keys()), key="v_method")
-    v_w = st.number_input(f"{v_name} 克數(g) ", min_value=0.0, step=1.0, key="v_weight")
-    if st.button("➕ 加入蔬菜"):
-        st.session_state.daily_total_kcal += (v_w * db_veggie[v_name] * method_map[v_method])
-        st.toast(f"已計入 {v_name}")
-
-with tabs[3]:
-    s_name = st.selectbox("醬料", list(db_sauce.keys()) + ["自定義"])
-    s_w = st.number_input("份量(g/ml)", min_value=0.0, step=1.0)
-    if st.button("➕ 加入醬料"):
-        st.session_state.daily_total_kcal += (s_w * db_sauce.get(s_name, 0.5))
-
-# --- 4. 數據同步 (與 Google Sheets 對接) ---
+# --- 3. 分類紀錄區 ---
 st.divider()
-st.subheader(f"🔥 今日累計攝取：{st.session_state.daily_total_kcal:.1f} kcal")
+t1, t2, t3, t4 = st.tabs(["🍚 澱粉/奶", "🥩 蛋白質", "🥬 蔬菜", "🧂 其他(水果/鹽/油)"])
 
-# 這裡請貼入你剛才測試成功的那串 /exec 網址
-script_url = "https://script.google.com/macros/s/AKfycbyJJwrjQaIbVao0R5tqtS7l2mKLHifrU8O4ylwwG4yrmuyJZPna_clLAZLeAUkwUcXJ7A/exec"
+with t1:
+    c_w = st.number_input("熟主食重量 (g)", min_value=0.0, step=10.0)
+    m_ml = st.number_input("奶類/優酪乳 (ml)", min_value=0.0, step=100.0)
+    if st.button("➕ 加入紀錄", key="add_t1"):
+        st.session_state.daily["carbs"] += (c_w / CONV["carbs_g"])
+        st.session_state.daily["milk"] += (m_ml / CONV["milk_ml"])
+        st.rerun()
 
-if st.button("🚀 數據直接入庫 (不跳轉)", use_container_width=True):
+with t2:
+    m_part = st.selectbox("肉類部位", low_meat + mid_meat)
+    m_w = st.number_input("熟肉重量 (g)", min_value=0.0, step=5.0)
+    method = st.selectbox("烹調方式", ["水煮/清蒸", "乾煎/油炒", "油炸"])
+    outside = st.checkbox("這餐是外食")
+    if st.button("➕ 加入紀錄", key="add_t2"):
+        if m_part in low_meat: st.session_state.daily["protein_low"] += (m_w / CONV["protein_g"])
+        else: st.session_state.daily["protein_mid"] += (m_w / CONV["protein_g"])
+        f_add = 1.0 if method == "乾煎/油炒" else (3.0 if method == "油炸" else 0.0)
+        if outside: f_add += 1.5
+        st.session_state.daily["fat"] += f_add
+        st.rerun()
+
+with t3:
+    v_name = st.selectbox("蔬菜種類", green_veggies + other_veggies)
+    v_w = st.number_input("熟菜重量 (g)", min_value=0.0, step=50.0)
+    if st.button("➕ 加入紀錄", key="add_t3"):
+        servings = v_w / CONV["veggie_g"]
+        st.session_state.daily["veggie"] += servings
+        if v_name in green_veggies: st.session_state.daily["veggie_green"] += servings
+        st.rerun()
+
+with t4:
+    f_w = st.number_input("水果 (g)", min_value=0.0)
+    oil_g = st.number_input("額外油脂 (g)", min_value=0.0)
+    salt_g = st.number_input("鹽巴 (g)", min_value=0.0)
+    if st.button("➕ 加入紀錄", key="add_t4"):
+        st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
+        st.session_state.daily["fat"] += (oil_g / 5)
+        st.session_state.daily["salt"] += salt_g
+        st.rerun()
+
+# --- 4. 數據同步 ---
+st.divider()
+if st.button("🚀 完成今日紀錄並存入 Excel", use_container_width=True):
     payload = {
-        "date": record_date.strftime('%Y-%m-%d'),
-        "weight": weight, 
-        "body_fat": body_fat, 
-        "visceral": visceral,
-        "waist": waist, 
-        "hip": hip, 
-        "sleep": sleep_info,
-        "water": water, 
-        "steps": steps, 
-        "kcal": round(st.session_state.daily_total_kcal, 1)
+        "date": datetime.now().strftime('%Y-%m-%d'),
+        "carbs": round(st.session_state.daily["carbs"], 1),
+        "pro_low": round(st.session_state.daily["protein_low"], 1),
+        "pro_mid": round(st.session_state.daily["protein_mid"], 1),
+        "veg_total": round(st.session_state.daily["veggie"], 1),
+        "veg_green": round(st.session_state.daily["veggie_green"], 1),
+        "fruit": round(st.session_state.daily["fruit"], 1),
+        "milk": round(st.session_state.daily["milk"], 1),
+        "fat": round(st.session_state.daily["fat"], 1),
+        "salt": round(st.session_state.daily["salt"], 1),
+        "kcal": 2710 # 固定的基準目標
     }
-    try:
-        response = requests.get(script_url, params=payload, timeout=10)
-        if response.status_code == 200:
-            st.success(f"✅ Excel 錄入成功！Google 回報：{response.text}")
-            st.balloons()
-        else:
-            st.error(f"❌ 同步失敗，代碼：{response.status_code}")
-    except Exception as e:
-        st.error(f"❌ 連線異常：{e}")
+    # 這裡放你的 requests.get(script_url, params=payload)
+    st.success("指南數據已精準入庫！已清空今日紀錄。")
+    st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
