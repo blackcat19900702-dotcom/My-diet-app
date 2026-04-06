@@ -2,23 +2,22 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import base64
 
-# --- 1. 雲端連線設定 ---
+# --- 1. 雲端連線設定 (Base64 版本) ---
 def init_sheet():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
-        # 從扁平化 Secrets 讀取
-        raw_key = st.secrets["gcp_private_key"]
-        
-        # 程式自動補回換行符號，解決連線失敗
-        formatted_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n").replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
+        # 從 Secrets 讀取 Base64 金鑰並解碼，徹底避開換行格式問題
+        b64_key = st.secrets["gcp_private_key_base64"]
+        decoded_key = base64.b64decode(b64_key).decode("utf-8")
         
         creds_info = {
             "type": st.secrets["gcp_type"],
             "project_id": st.secrets["gcp_project_id"],
             "private_key_id": st.secrets["gcp_private_key_id"],
-            "private_key": formatted_key,
+            "private_key": decoded_key,
             "client_email": st.secrets["gcp_client_email"],
             "client_id": st.secrets["gcp_client_id"],
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -29,15 +28,15 @@ def init_sheet():
         
         creds = Credentials.from_service_account_info(creds_info, scopes=scope)
         client = gspread.authorize(creds)
-        # 確保你的試算表名稱是 MyDietLog
+        # ⚠️ 請確保你的 Google 試算表檔名完全等於 MyDietLog
         return client.open("MyDietLog").sheet1
     except Exception as e:
         return f"❌ 連線失敗: {str(e)}"
 
-# 初始化變數
+# 初始化連線狀態
 sheet_result = init_sheet()
 
-# --- 2. 營養參數 ---
+# --- 2. 營養參數設定 ---
 GOALS = {
     "carbs": 16.0, "milk": 3.0, "protein_low": 7.0, "protein_mid": 3.5, 
     "veggie": 4.0, "veggie_green": 2.0, "fruit": 3.0, "fat": 5.5, 
@@ -52,28 +51,30 @@ KCAL_MAP = {
 MEAT_DB = {"雞胸肉": "low", "雞腿肉(去皮)": "low", "牛腱": "low", "豆腐": "low", "雞蛋": "mid", "鮭魚": "mid", "梅花豬": "mid"}
 VEG_DB = {"綠花椰": True, "菠菜": True, "地瓜葉": True, "空心菜": True, "高麗菜": False, "絲瓜": False}
 
+# 初始化手機暫存
 if 'daily' not in st.session_state:
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
     st.session_state.water = 0.0
 
 st.set_page_config(page_title="2710kcal 智慧監控", layout="wide")
 
-# --- 3. 儀表板 ---
+# --- 3. 頂部儀表板 ---
 total_kcal = sum(st.session_state.daily[k] * KCAL_MAP[k] for k in KCAL_MAP.keys() if k in KCAL_MAP)
 
 st.title("🚀 2710kcal 智慧監控")
 
 c1, c2 = st.columns(2)
 with c1:
-    if 2660 <= total_kcal <= 2710: st.success(f"🟢 完美區間：{total_kcal:.0f} kcal")
-    elif total_kcal > 2710: st.error(f"🔴 超標提醒：{total_kcal:.0f} kcal")
-    else: st.warning(f"🟡 目前進度：{total_kcal:.0f} kcal")
+    if 2660 <= total_kcal <= 2710: st.success(f"🟢 完美達標：{total_kcal:.0f} kcal")
+    elif total_kcal > 2710: st.error(f"🔴 已超標：{total_kcal:.0f} kcal")
+    else: st.warning(f"🟡 目前熱量：{total_kcal:.0f} kcal")
 with c2:
-    st.info(f"💧 飲水進度：{st.session_state.water:.0f} / 3000 ml")
+    st.info(f"💧 飲水：{st.session_state.water:.0f} / 3000 ml")
     st.progress(min(st.session_state.water / 3000, 1.0))
 
 # --- 4. 側邊欄同步 ---
 st.sidebar.header("☁️ 雲端同步中心")
+# 檢查 sheet_result 是否為字串，如果不是，代表連線成功
 if not isinstance(sheet_result, str):
     st.sidebar.success("✅ 雲端已連線")
     if st.sidebar.button("💾 結算並存入 Google"):
@@ -92,13 +93,14 @@ if not isinstance(sheet_result, str):
             ]
             sheet_result.append_row(row)
             st.sidebar.balloons()
-            st.sidebar.success("數據已成功寫入！")
+            st.sidebar.success("數據已傳送到 Google 表單！")
         except Exception as e:
-            st.sidebar.error(f"同步錯誤: {e}")
+            st.sidebar.error(f"寫入失敗: {e}")
 else:
+    # 顯示 init_sheet 回傳的錯誤訊息
     st.sidebar.error(sheet_result)
 
-# --- 5. 數據指標 ---
+# --- 5. 份數監控指標 ---
 st.divider()
 m_cols = st.columns(7)
 metrics = [
@@ -128,7 +130,7 @@ with tabs[2]:
     m_name = st.selectbox("選擇肉類", list(MEAT_DB.keys()))
     m_w = st.number_input("熟肉重量 (g)", min_value=0.0, step=5.0, value=0.0)
     method = st.selectbox("烹調方式", ["蒸/煮", "煎/炒", "炸"])
-    is_out = st.checkbox("外食加油")
+    is_out = st.checkbox("外食加油 (外食請勾選)")
     if st.button("➕ 儲存肉類"):
         serv = m_w / 35
         if MEAT_DB[m_name] == "low": st.session_state.daily["protein_low"] += serv
@@ -161,7 +163,7 @@ with tabs[5]:
         st.session_state.daily["salt"] += s_g
         st.rerun()
 
-if st.button("🔄 開啟新的一天", use_container_width=True):
+if st.button("🔄 開啟新的一天 (清空暫存)", use_container_width=True):
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
     st.session_state.water = 0.0
     st.rerun()
