@@ -1,90 +1,99 @@
 import streamlit as st
-from datetime import datetime
 
-# --- 1. 營養目標設定 (2710kcal) ---
+# --- 1. 核心配額與換算 ---
 GOALS = {
-    "carbs":   {"name": "澱粉", "target": 16.0, "kcal": 70},
-    "milk":    {"name": "奶類", "target": 3.0, "kcal": 150},
-    "pro_low": {"name": "低脂肉", "target": 7.0, "kcal": 55},
-    "pro_mid": {"name": "中脂肉", "target": 3.5, "kcal": 75},
-    "veggie":  {"name": "蔬菜", "target": 4.0, "kcal": 25},
-    "fruit":   {"name": "水果", "target": 3.0, "kcal": 60},
-    "fat":     {"name": "油脂", "target": 5.5, "kcal": 45},
-    "salt":    {"name": "鹽分", "target": 4.0, "kcal": 0}
+    "carbs": 16.0, "protein_low": 7.0, "protein_mid": 3.5, 
+    "veggie": 4.0, "veggie_green": 2.0, "fruit": 3.0, 
+    "milk": 3.0, "fat": 5.5, "salt": 4.0
 }
+
+CONV = {"carbs_g": 60, "protein_g": 35, "veggie_g": 100, "fruit_g": 100, "milk_ml": 240}
+
+# 建立肉類資料庫：自動判別脂肪等級
+MEAT_DATABASE = {
+    "雞胸肉": "low", "雞腿肉(去皮)": "low", "和尚頭(牛)": "low", "牛腱": "low", 
+    "里肌肉(豬)": "low", "鱈魚": "low", "豆腐": "low",
+    "雞蛋": "mid", "鮭魚": "mid", "嫩肩里肌(板腱)": "mid", 
+    "梅花豬": "mid", "豬絞肉": "mid", "雞腿肉(帶皮)": "mid"
+}
+
+# 蔬菜分類
+GREEN_LIST = ["綠花椰", "菠菜", "地瓜葉", "空心菜"]
+OTHER_VEG_LIST = ["櫛瓜", "茄子", "高麗菜", "白花椰", "娃娃菜", "絲瓜", "洋蔥", "雪白菇", "鴻禧菇"]
 
 if 'daily' not in st.session_state:
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
-    st.session_state.water = 0.0
 
-st.set_page_config(page_title="2710kcal 飲食紀錄", layout="wide")
+st.set_page_config(page_title="2710kcal 智慧導航", layout="wide")
 
-# --- 2. 顯示目前的數值 ---
-total_kcal = sum(st.session_state.daily[k] * GOALS[k]["kcal"] for k in GOALS.keys())
-st.title(f"🔥 今日總熱量: {total_kcal:.0f} / 2710 kcal")
-
-cols = st.columns(4)
-for i, (key, data) in enumerate(GOALS.items()):
-    cur = st.session_state.daily[key]
-    rem = data["target"] - cur
-    cols[i % 4].metric(data["name"], f"剩 {rem:.1f}", delta=f"攝取 {cur:.1f}")
-
-# --- 3. 自動判斷輸入區 ---
-st.divider()
-c1, c2, c3 = st.columns(3)
-
-with c1:
-    in_carbs_g = st.number_input("熟澱粉重量 (g) [60g=1份]", 0.0, step=10.0)
-    in_veggie_g = st.number_input("熟蔬菜重量 (g) [100g=1份]", 0.0, step=10.0)
-    in_fruit = st.number_input("水果份數", 0.0, step=0.5)
-
-with c2:
-    in_pro_g = st.number_input("肉類總重量 (g) [35g=1份]", 0.0, step=5.0)
-    pro_type = st.radio("肉類油份判定", ["偏瘦 (全低脂)", "各半 (50/50)", "偏肥 (全中脂)"], horizontal=True)
-    in_milk = st.number_input("奶類份數", 0.0, step=0.5)
-
-with c3:
-    in_water = st.number_input("飲水量 (ml)", 0.0, step=50.0, value=250.0)
-    in_fat = st.number_input("油脂 (份)", 0.0, step=0.5)
-    in_salt = st.number_input("鹽分 (份)", 0.0, step=0.5)
-
-if st.button("➕ 存入紀錄", use_container_width=True):
-    # 澱粉與蔬菜自動換算
-    st.session_state.daily["carbs"] += (in_carbs_g / 60)
-    st.session_state.daily["veggie"] += (in_veggie_g / 100)
-    
-    # 肉類自動判定邏輯
-    servings = (in_pro_g / 35)
-    if pro_type == "偏瘦 (全低脂)":
-        st.session_state.daily["pro_low"] += servings
-    elif pro_type == "偏肥 (全中脂)":
-        st.session_state.daily["pro_mid"] += servings
-    else:
-        st.session_state.daily["pro_low"] += (servings * 0.5)
-        st.session_state.daily["pro_mid"] += (servings * 0.5)
-    
-    st.session_state.daily["fruit"] += in_fruit
-    st.session_state.daily["milk"] += in_milk
-    st.session_state.daily["fat"] += in_fat
-    st.session_state.daily["salt"] += in_salt
-    st.session_state.water += in_water
-    st.rerun()
-
-# --- 4. Excel 匯出字串 ---
-st.divider()
-st.subheader("📋 Excel 貼上文字")
-date_str = datetime.now().strftime("%Y/%m/%d")
-excel_values = [
-    date_str, 
-    str(round(total_kcal)),
-    *[f"{round(st.session_state.daily[k], 1)}" for k in GOALS.keys()],
-    str(round(st.session_state.water))
+# --- 2. 儀表板：剩餘份數 ---
+st.title("⚖️ 2710kcal 智慧飲食監控")
+cols = st.columns(6)
+items = [
+    ("🍞 主食", "carbs"), ("🥩 低脂肉", "protein_low"), ("🍖 中脂肉", "protein_mid"),
+    ("🥦 蔬菜", "veggie"), ("🍎 水果", "fruit"), ("🥑 油脂", "fat")
 ]
-excel_row = "\t".join(excel_values)
-st.code(excel_row, language="text")
 
-# --- 5. 重置功能 ---
-if st.button("🔄 重置今日數據", use_container_width=True):
+for i, (label, key) in enumerate(items):
+    current = st.session_state.daily[key]
+    rem = GOALS[key] - current
+    color = "normal" if rem >= 0 else "inverse"
+    cols[i].metric(label, f"剩 {rem:.1f} 份", delta=f"{current:.1f} 已吃", delta_color=color)
+
+# --- 3. 自動化紀錄區 ---
+st.divider()
+t1, t2, t3, t4 = st.tabs(["🍚 澱粉/奶類", "🥩 肉類(自動判別)", "🥬 蔬菜", "🧂 其他"])
+
+with t1:
+    c_w = st.number_input("熟主食重量 (g)", min_value=0.0, step=10.0)
+    m_ml = st.number_input("奶類/優酪乳 (ml)", min_value=0.0, step=100.0)
+    if st.button("➕ 紀錄澱粉與奶"):
+        st.session_state.daily["carbs"] += (c_w / CONV["carbs_g"])
+        st.session_state.daily["milk"] += (m_ml / CONV["milk_ml"])
+        st.rerun()
+
+with t2:
+    # 這裡只需要選部位，程式會自動判別 fat level
+    m_part = st.selectbox("選擇肉類部位", list(MEAT_DATABASE.keys()))
+    m_w = st.number_input("熟肉重量 (g)", min_value=0.0, step=5.0)
+    method = st.selectbox("烹調方式", ["水煮/清蒸", "乾煎/油炒", "油炸"])
+    outside = st.checkbox("這餐是外食")
+    
+    if st.button("➕ 紀錄肉類"):
+        # 1. 自動判別並增加蛋白份數
+        fat_level = MEAT_DATABASE[m_part]
+        servings = m_w / CONV["protein_g"]
+        if fat_level == "low":
+            st.session_state.daily["protein_low"] += servings
+        else:
+            st.session_state.daily["protein_mid"] += servings
+            
+        # 2. 自動計算料理油脂
+        f_add = 1.0 if method == "乾煎/油炒" else (3.5 if method == "油炸" else 0.0)
+        if outside: f_add += 1.5
+        st.session_state.daily["fat"] += f_add
+        st.rerun()
+
+with t3:
+    v_name = st.selectbox("選擇蔬菜", GREEN_LIST + OTHER_VEG_LIST)
+    v_w = st.number_input("熟菜重量 (g)", min_value=0.0, step=50.0)
+    if st.button("➕ 紀錄蔬菜"):
+        servings = v_w / CONV["veggie_g"]
+        st.session_state.daily["veggie"] += servings
+        if v_name in GREEN_LIST:
+            st.session_state.daily["veggie_green"] += servings
+        st.rerun()
+
+with t4:
+    f_w = st.number_input("水果重量 (g)", min_value=0.0)
+    salt_g = st.number_input("台鹽鹽巴量 (g)", min_value=0.0)
+    if st.button("➕ 紀錄水果與鹽"):
+        st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
+        st.session_state.daily["salt"] += salt_g
+        st.rerun()
+
+# --- 4. 控制區 ---
+st.divider()
+if st.button("🔄 開啟新的一天", use_container_width=True):
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
-    st.session_state.water = 0.0
     st.rerun()
