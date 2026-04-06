@@ -5,7 +5,6 @@ from datetime import datetime
 BASE_KCAL = 2710  
 WATER_GOAL = 3000.0
 
-# 2710kcal 的分配目標
 GOALS = {
     "carbs": 16.0, "milk": 3.0, "protein_low": 7.0, "protein_mid": 3.5, 
     "veggie": 4.0, "fruit": 3.0, "fat": 5.5, "salt": 4.0
@@ -16,7 +15,17 @@ KCAL_MAP = {
     "veggie": 25, "fruit": 60, "fat": 45, "salt": 0
 }
 
-CONV = {"carbs_g": 60, "protein_g": 35, "veggie_g": 100, "fruit_g": 100, "milk_ml": 240}
+# --- 2. 分類資料庫 ---
+# 主食資料庫：種類與 1 份對應的熟重 (g)
+CARBS_DATABASE = {
+    "白米飯/糙米飯 (60g/份)": 60,
+    "地瓜/馬鈴薯 (55g/份)": 55,
+    "熟麵條/意麵 (60g/份)": 60,
+    "吐司 (30g/份)": 30,
+    "燕麥片 (20g/份)": 20,
+    "玉米 (85g/份)": 85,
+    "南瓜 (85g/份)": 85
+}
 
 # 肉類資料庫
 MEAT_DATABASE = {
@@ -32,12 +41,12 @@ OTHER_VEG_LIST = ["櫛瓜", "茄子", "高麗菜", "白花椰", "娃娃菜", "�
 
 if 'daily' not in st.session_state:
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
-    st.session_state.veggie_green = 0.0  # 獨立紀錄深綠色份數
+    st.session_state.veggie_green = 0.0  
     st.session_state.water = 0.0
 
 st.set_page_config(page_title="2710kcal 智慧導航", layout="wide")
 
-# --- 2. 儀表板與紅綠燈 ---
+# --- 3. 儀表板與紅綠燈 ---
 st.title("⚖️ 2710kcal 智慧飲食監控")
 total_kcal = sum(st.session_state.daily[k] * KCAL_MAP.get(k, 0) for k in GOALS.keys())
 is_perfect = (BASE_KCAL - 50) <= total_kcal <= BASE_KCAL
@@ -49,11 +58,10 @@ if is_perfect:
 else:
     st.error("🔴 紅燈：熱量偏差過大")
 
-# 顯示各項剩餘份數
 cols = st.columns(7)
 items = [
-    ("🍞 主食", "carbs"), ("🥩 低脂肉", "protein_low"), ("🍖 中脂肉", "protein_mid"),
-    ("🥦 總蔬菜", "veggie"), ("🍎 水果", "fruit"), ("🥑 油脂", "fat")
+    ("🍞 主食", "carbs"), ("🥛 奶類", "milk"), ("🥩 低脂肉", "protein_low"), 
+    ("🍖 中脂肉", "protein_mid"), ("🥦 總蔬菜", "veggie"), ("🍎 水果", "fruit"), ("🥑 油脂", "fat")
 ]
 
 for i, (label, key) in enumerate(items):
@@ -61,63 +69,68 @@ for i, (label, key) in enumerate(items):
     rem = GOALS[key] - current
     cols[i].metric(label, f"剩 {rem:.1f}", delta=f"{current:.1f} 已吃")
 
-# 飲水儀表板
-water_rem = WATER_GOAL - st.session_state.water
-cols[6].metric("💧 飲水", f"剩 {max(0, int(water_rem))}ml", delta=f"{int(st.session_state.water)}ml")
+# 飲水與深綠色蔬菜資訊
+c1, c2 = st.columns(2)
+with c1:
+    water_rem = WATER_GOAL - st.session_state.water
+    st.info(f"💧 飲水進度：已喝 {int(st.session_state.water)}ml / 剩 {max(0, int(water_rem))}ml")
+with c2:
+    st.info(f"🍃 深綠色蔬菜：已攝取 {st.session_state.veggie_green:.1f} 份 (目標佔總菜量一半)")
 
-# 深綠色蔬菜達成率顯示
-st.info(f"🍃 深綠色蔬菜進度：已攝取 {st.session_state.veggie_green:.1f} 份 (目標佔總蔬菜的一半：{st.session_state.daily['veggie']/2:.1f} 份)")
-
-# --- 3. 紀錄區 ---
+# --- 4. 紀錄區 (主食清單、奶類、肉類、蔬菜、其他、飲水全部獨立) ---
 st.divider()
-t1, t2, t3, t4, t5 = st.tabs(["🍚 澱粉/奶類", "🥩 肉類", "🥬 蔬菜", "🍎 水果/油脂/鹽", "💧 飲水"])
+t1, t2, t3, t4, t5, t6 = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
 with t1:
-    c_w = st.number_input("熟主食重量 (g)", min_value=0.0, step=10.0)
-    m_ml = st.number_input("奶類/優酪乳 (ml)", min_value=0.0, step=100.0)
-    if st.button("➕ 紀錄澱粉與奶"):
-        st.session_state.daily["carbs"] += (c_w / CONV["carbs_g"])
-        st.session_state.daily["milk"] += (m_ml / CONV["milk_ml"])
+    carb_type = st.selectbox("選擇主食種類", list(CARBS_DATABASE.keys()))
+    c_w = st.number_input("熟重 (g)", min_value=0.0, step=5.0, key="input_carbs")
+    if st.button("➕ 紀錄主食", key="btn_carbs"):
+        unit_weight = CARBS_DATABASE[carb_type]
+        st.session_state.daily["carbs"] += (c_w / unit_weight)
         st.rerun()
 
 with t2:
+    m_ml = st.number_input("奶類/優酪乳 (ml)", min_value=0.0, step=100.0, key="input_milk")
+    if st.button("➕ 紀錄奶類", key="btn_milk"):
+        st.session_state.daily["milk"] += (m_ml / 240) # 240ml 為一份
+        st.rerun()
+
+with t3:
     m_part = st.selectbox("選擇肉類部位", list(MEAT_DATABASE.keys()))
     m_w = st.number_input("熟肉重量 (g)", min_value=0.0, step=5.0)
     method = st.selectbox("烹調方式", ["水煮/清蒸", "氣炸鍋", "乾煎/油炒", "油炸"])
     outside = st.checkbox("這餐是外食")
     if st.button("➕ 紀錄肉類"):
         fat_level = MEAT_DATABASE[m_part]
-        servings = m_w / CONV["protein_g"]
+        servings = m_w / 35 # 35g 為一份
         if fat_level == "low": st.session_state.daily["protein_low"] += servings
         else: st.session_state.daily["protein_mid"] += servings
-        
         f_add = 0.5 if method == "氣炸鍋" else (1.0 if method == "乾煎/油炒" else (3.5 if method == "油炸" else 0.0))
         if outside: f_add += 1.5
         st.session_state.daily["fat"] += f_add
         st.rerun()
 
-with t3:
+with t4:
     v_name = st.selectbox("選擇蔬菜種類", GREEN_LIST + OTHER_VEG_LIST)
     v_w = st.number_input("熟菜重量 (g)", min_value=0.0, step=50.0)
     if st.button("➕ 紀錄蔬菜"):
-        servings = v_w / CONV["veggie_g"]
+        servings = v_w / 100 # 100g 為一份
         st.session_state.daily["veggie"] += servings
-        # 自動判定是否為深綠色
         if v_name in GREEN_LIST:
             st.session_state.veggie_green += servings
         st.rerun()
 
-with t4:
+with t5:
     col_fat, col_fruit, col_salt = st.columns(3)
     with col_fat:
         f_add_manual = st.number_input("油脂 (份)", min_value=0.0, step=0.5)
-        if st.button("➕ 紀錄油脂"):
+        if st.button("➕ 紀錄手動油脂"):
             st.session_state.daily["fat"] += f_add_manual
             st.rerun()
     with col_fruit:
-        f_w = st.number_input("水果 (g)", min_value=0.0, step=10.0)
+        f_w = st.number_input("水果熟重 (g)", min_value=0.0, step=10.0)
         if st.button("➕ 紀錄水果"):
-            st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
+            st.session_state.daily["fruit"] += (f_w / 100) # 100g 為一份
             st.rerun()
     with col_salt:
         salt_g = st.number_input("鹽巴 (g)", min_value=0.0, step=0.5)
@@ -125,21 +138,20 @@ with t4:
             st.session_state.daily["salt"] += salt_g
             st.rerun()
 
-with t5:
+with t6:
     w_ml = st.number_input("單次飲水量 (ml)", min_value=0.0, step=50.0, value=250.0)
     if st.button("➕ 紀錄飲水"):
         st.session_state.water += w_ml
         st.rerun()
 
-# --- 4. Excel 結算 ---
+# --- 5. Excel 結算 ---
 st.divider()
 status_str = "綠燈" if is_perfect else "紅燈"
-# 結算資料中包含深綠色蔬菜份數，方便 Excel 追蹤
 excel_data = [
     datetime.now().strftime("%Y/%m/%d"), str(round(total_kcal)), status_str,
     f"{round(st.session_state.daily['carbs'], 1)}", f"{round(st.session_state.daily['milk'], 1)}",
     f"{round(st.session_state.daily['protein_low'], 1)}", f"{round(st.session_state.daily['protein_mid'], 1)}",
-    f"{round(st.session_state.daily['veggie'], 1)}", f"{round(st.session_state.veggie_green, 1)}", # 菜/綠菜分開
+    f"{round(st.session_state.daily['veggie'], 1)}", f"{round(st.session_state.veggie_green, 1)}", 
     f"{round(st.session_state.daily['fruit'], 1)}", f"{round(st.session_state.daily['fat'], 1)}", 
     f"{round(st.session_state.daily['salt'], 1)}", str(round(st.session_state.water))
 ]
