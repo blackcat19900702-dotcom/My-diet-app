@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime
 
 # --- 1. 核心配額與換算 ---
+BASE_KCAL = 2710  # 基準值
 GOALS = {
     "carbs": 16.0, "milk": 3.0, "protein_low": 7.0, "protein_mid": 3.5, 
     "veggie": 4.0, "fruit": 3.0, "fat": 5.5, "salt": 4.0
@@ -30,10 +31,23 @@ if 'daily' not in st.session_state:
 
 st.set_page_config(page_title="2710kcal 智慧導航", layout="wide")
 
-# --- 2. 儀表板 ---
+# --- 2. 儀表板與燈號判定 ---
 st.title("⚖️ 2710kcal 智慧飲食監控")
+
+# 計算總熱量
 total_kcal = sum(st.session_state.daily[k] * KCAL_MAP.get(k, 0) for k in GOALS.keys())
-st.subheader(f"🔥 今日總熱量: {total_kcal:.0f} / 2710 kcal")
+
+# 燈號邏輯判定
+# 綠燈：等於 2710 或低於基準 50 以內 (2660 ~ 2710)
+# 紅燈：超過 2710 或低於基準超過 50
+is_perfect = (BASE_KCAL - 50) <= total_kcal <= BASE_KCAL
+
+st.subheader(f"🔥 今日總熱量: {total_kcal:.0f} / {BASE_KCAL} kcal")
+
+if is_perfect:
+    st.success(f"🟢 綠燈：熱量控制精準！(與目標差距 {total_kcal - BASE_KCAL:.0f} kcal)")
+else:
+    st.error(f"🔴 紅燈：偏差過大，請調整飲食內容 (與目標差距 {total_kcal - BASE_KCAL:.0f} kcal)")
 
 cols = st.columns(6)
 items = [
@@ -61,7 +75,6 @@ with t1:
 with t2:
     m_part = st.selectbox("選擇肉類部位", list(MEAT_DATABASE.keys()))
     m_w = st.number_input("熟肉重量 (g)", min_value=0.0, step=5.0)
-    # 新增氣炸鍋選項
     method = st.selectbox("烹調方式", ["水煮/清蒸", "氣炸鍋", "乾煎/油炒", "油炸"])
     outside = st.checkbox("這餐是外食")
     
@@ -73,7 +86,6 @@ with t2:
         else:
             st.session_state.daily["protein_mid"] += servings
             
-        # 油脂邏輯修正
         f_add = 0.0
         if method == "氣炸鍋": f_add = 0.5
         elif method == "乾煎/油炒": f_add = 1.0
@@ -92,7 +104,7 @@ with t3:
 
 with t4:
     f_w = st.number_input("水果重量 (g)", min_value=0.0)
-    salt_g = st.number_input("鹽巴量 (g)", min_value=0.0)
+    salt_g = st.number_input("台鹽鹽巴量 (g)", min_value=0.0)
     w_ml = st.number_input("飲水量 (ml)", min_value=0.0, step=50.0, value=250.0)
     if st.button("➕ 紀錄其他"):
         st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
@@ -105,9 +117,13 @@ st.divider()
 st.subheader("📋 Excel 結算複製貼上")
 
 date_str = datetime.now().strftime("%Y/%m/%d")
+# 在 Excel 字串中加入「燈號狀態」供未來回顧
+status_str = "綠燈" if is_perfect else "紅燈"
+
 excel_data = [
     date_str, 
     str(round(total_kcal)),
+    status_str,  # 新增狀態欄位
     f"{round(st.session_state.daily['carbs'], 1)}",
     f"{round(st.session_state.daily['milk'], 1)}",
     f"{round(st.session_state.daily['protein_low'], 1)}",
