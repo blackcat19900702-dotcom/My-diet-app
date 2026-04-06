@@ -4,18 +4,16 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # --- 1. 雲端連線設定 ---
-# --- 1. 雲端連線設定 (扁平化 Secrets 版本) ---
 def init_sheet():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
-        # 從 Secrets 抓取扁平化的資料
+        # 從扁平化 Secrets 讀取
         raw_key = st.secrets["gcp_private_key"]
         
-        # 這裡最關鍵：程式自動幫你把換行符號補回去，解決 InvalidPadding 問題
+        # 程式自動補回換行符號，解決連線失敗
         formatted_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n").replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
         
-        # 重新組合成 Google 認得的 JSON 結構
         creds_info = {
             "type": st.secrets["gcp_type"],
             "project_id": st.secrets["gcp_project_id"],
@@ -31,11 +29,20 @@ def init_sheet():
         
         creds = Credentials.from_service_account_info(creds_info, scopes=scope)
         client = gspread.authorize(creds)
-        
-        # 確認你的 Google Sheet 檔名是否真的叫 MyDietLog
+        # 確保你的試算表名稱是 MyDietLog
         return client.open("MyDietLog").sheet1
     except Exception as e:
         return f"❌ 連線失敗: {str(e)}"
+
+# 初始化變數
+sheet_result = init_sheet()
+
+# --- 2. 營養參數 ---
+GOALS = {
+    "carbs": 16.0, "milk": 3.0, "protein_low": 7.0, "protein_mid": 3.5, 
+    "veggie": 4.0, "veggie_green": 2.0, "fruit": 3.0, "fat": 5.5, 
+    "salt": 4.0, "target_kcal": 2710.0, "target_water": 3000.0
+}
 
 KCAL_MAP = {
     "carbs": 70, "milk": 150, "protein_low": 55, "protein_mid": 75,
@@ -49,29 +56,27 @@ if 'daily' not in st.session_state:
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
     st.session_state.water = 0.0
 
-st.set_page_config(page_title="2710kcal 監控", layout="wide")
+st.set_page_config(page_title="2710kcal 智慧監控", layout="wide")
 
-# --- 3. 頂部儀表板 ---
+# --- 3. 儀表板 ---
 total_kcal = sum(st.session_state.daily[k] * KCAL_MAP[k] for k in KCAL_MAP.keys() if k in KCAL_MAP)
 
 st.title("🚀 2710kcal 智慧監控")
 
 c1, c2 = st.columns(2)
 with c1:
-    if 2660 <= total_kcal <= 2710: st.success(f"🟢 完美：{total_kcal:.0f} kcal")
-    elif total_kcal > 2710: st.error(f"🔴 超標：{total_kcal:.0f} kcal")
-    else: st.warning(f"🟡 進度：{total_kcal:.0f} kcal")
+    if 2660 <= total_kcal <= 2710: st.success(f"🟢 完美區間：{total_kcal:.0f} kcal")
+    elif total_kcal > 2710: st.error(f"🔴 超標提醒：{total_kcal:.0f} kcal")
+    else: st.warning(f"🟡 目前進度：{total_kcal:.0f} kcal")
 with c2:
-    st.info(f"💧 飲水：{st.session_state.water:.0f} / 3000 ml")
+    st.info(f"💧 飲水進度：{st.session_state.water:.0f} / 3000 ml")
     st.progress(min(st.session_state.water / 3000, 1.0))
 
 # --- 4. 側邊欄同步 ---
-st.sidebar.header("☁️ 雲端同步")
-# 只要 sheet_result 不是字串（代表不是錯誤訊息），就視為連線成功
+st.sidebar.header("☁️ 雲端同步中心")
 if not isinstance(sheet_result, str):
     st.sidebar.success("✅ 雲端已連線")
     if st.sidebar.button("💾 結算並存入 Google"):
-        # ... 後面的程式碼不變
         try:
             status_text = "✅ 達標" if 2660 <= total_kcal <= 2710 else "🔴 未達標"
             row = [
@@ -87,9 +92,9 @@ if not isinstance(sheet_result, str):
             ]
             sheet_result.append_row(row)
             st.sidebar.balloons()
-            st.sidebar.success("同步成功！")
+            st.sidebar.success("數據已成功寫入！")
         except Exception as e:
-            st.sidebar.error(f"同步失敗: {e}")
+            st.sidebar.error(f"同步錯誤: {e}")
 else:
     st.sidebar.error(sheet_result)
 
@@ -104,7 +109,7 @@ for i, (label, key) in enumerate(metrics):
     rem = GOALS[key] - st.session_state.daily[key]
     m_cols[i].metric(label, f"剩 {rem:.1f}", delta=f"{st.session_state.daily[key]:.1f}")
 
-# --- 6. 輸入分頁 (已移除上限) ---
+# --- 6. 輸入分頁 ---
 tabs = st.tabs(["🍚 澱粉", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "💧 飲水", "🍎 其他"])
 
 with tabs[0]:
