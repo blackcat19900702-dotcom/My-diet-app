@@ -58,9 +58,11 @@ with c2:
 
 # --- 4. 側邊欄同步 ---
 st.sidebar.header("☁️ 雲端同步")
-if isinstance(sheet_result, gspread.models.Worksheet):
+# 只要 sheet_result 不是字串（代表不是錯誤訊息），就視為連線成功
+if not isinstance(sheet_result, str):
     st.sidebar.success("✅ 雲端已連線")
     if st.sidebar.button("💾 結算並存入 Google"):
+        # ... 後面的程式碼不變
         try:
             status_text = "✅ 達標" if 2660 <= total_kcal <= 2710 else "🔴 未達標"
             row = [
