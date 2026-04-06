@@ -4,29 +4,38 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # --- 1. 雲端連線設定 ---
+# --- 1. 雲端連線設定 (扁平化 Secrets 版本) ---
 def init_sheet():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        if "gcp_service_account" not in st.secrets:
-            return "❌ Secrets 未設定"
         
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        # 從 Secrets 抓取扁平化的資料
+        raw_key = st.secrets["gcp_private_key"]
+        
+        # 這裡最關鍵：程式自動幫你把換行符號補回去，解決 InvalidPadding 問題
+        formatted_key = raw_key.replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n").replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----")
+        
+        # 重新組合成 Google 認得的 JSON 結構
+        creds_info = {
+            "type": st.secrets["gcp_type"],
+            "project_id": st.secrets["gcp_project_id"],
+            "private_key_id": st.secrets["gcp_private_key_id"],
+            "private_key": formatted_key,
+            "client_email": st.secrets["gcp_client_email"],
+            "client_id": st.secrets["gcp_client_id"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{st.secrets['gcp_client_email'].replace('@', '%40')}"
+        }
+        
+        creds = Credentials.from_service_account_info(creds_info, scopes=scope)
         client = gspread.authorize(creds)
         
-        # 開啟試算表 (名稱必須為 MyDietLog)
+        # 確認你的 Google Sheet 檔名是否真的叫 MyDietLog
         return client.open("MyDietLog").sheet1
     except Exception as e:
         return f"❌ 連線失敗: {str(e)}"
-
-sheet_result = init_sheet()
-
-# --- 2. 營養參數 ---
-GOALS = {
-    "carbs": 16.0, "milk": 3.0, "protein_low": 7.0, "protein_mid": 3.5, 
-    "veggie": 4.0, "veggie_green": 2.0, "fruit": 3.0, "fat": 5.5, 
-    "salt": 4.0, "target_kcal": 2710.0, "target_water": 3000.0
-}
 
 KCAL_MAP = {
     "carbs": 70, "milk": 150, "protein_low": 55, "protein_mid": 75,
