@@ -24,9 +24,6 @@ MEAT_DATABASE = {
     "梅花豬": "mid", "豬絞肉": "mid", "雞腿肉(帶皮)": "mid"
 }
 
-GREEN_LIST = ["綠花椰", "菠菜", "地瓜葉", "空心菜"]
-OTHER_VEG_LIST = ["櫛瓜", "茄子", "高麗菜", "白花椰", "娃娃菜", "絲瓜", "洋蔥", "雪白菇", "鴻禧菇"]
-
 if 'daily' not in st.session_state:
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
     st.session_state.water = 0.0
@@ -41,9 +38,9 @@ is_perfect = (BASE_KCAL - 50) <= total_kcal <= BASE_KCAL
 st.subheader(f"🔥 今日總熱量: {total_kcal:.0f} / {BASE_KCAL} kcal")
 
 if is_perfect:
-    st.success("🟢 綠燈：達標")
+    st.success("🟢 綠燈：熱量達標")
 else:
-    st.error("🔴 紅燈：偏差過大")
+    st.error("🔴 紅燈：熱量偏差過大")
 
 cols = st.columns(7)
 items = [
@@ -61,7 +58,7 @@ cols[6].metric("💧 飲水", f"剩 {max(0, int(water_rem))}ml", delta=f"{int(st
 
 # --- 3. 紀錄區 ---
 st.divider()
-t1, t2, t3, t4 = st.tabs(["🍚 澱粉/奶類", "🥩 肉類(自動判別)", "🥬 蔬菜", "🥤 飲水/油脂/其他"])
+t1, t2, t3, t4, t5 = st.tabs(["🍚 澱粉/奶類", "🥩 肉類", "🥬 蔬菜", "🍎 水果/油脂", "💧 飲水"])
 
 with t1:
     c_w = st.number_input("熟主食重量 (g)", min_value=0.0, step=10.0)
@@ -94,16 +91,18 @@ with t3:
         st.rerun()
 
 with t4:
-    # 這裡補上油脂輸入與飲水
-    f_add_manual = st.number_input("手動新增油脂 (份)", min_value=0.0, step=0.5, help="堅果或額外添加的油")
-    f_w = st.number_input("水果重量 (g)", min_value=0.0)
-    salt_g = st.number_input("台鹽鹽巴量 (g)", min_value=0.0)
-    w_ml = st.number_input("飲水量 (ml)", min_value=0.0, step=50.0, value=250.0)
-    
-    if st.button("➕ 紀錄其餘項目"):
+    f_add_manual = st.number_input("手動新增油脂 (份)", min_value=0.0, step=0.5)
+    f_w = st.number_input("水果重量 (g)", min_value=0.0, step=10.0)
+    salt_g = st.number_input("台鹽鹽巴量 (g)", min_value=0.0, step=0.5)
+    if st.button("➕ 紀錄水果/油脂/鹽"):
         st.session_state.daily["fat"] += f_add_manual
         st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
         st.session_state.daily["salt"] += salt_g
+        st.rerun()
+
+with t5:
+    w_ml = st.number_input("單次飲水量 (ml)", min_value=0.0, step=50.0, value=250.0)
+    if st.button("➕ 紀錄飲水"):
         st.session_state.water += w_ml
         st.rerun()
 
