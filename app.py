@@ -5,6 +5,7 @@ from datetime import datetime
 BASE_KCAL = 2710  
 WATER_GOAL = 3000.0
 
+# 2710kcal 的分配目標
 GOALS = {
     "carbs": 16.0, "milk": 3.0, "protein_low": 7.0, "protein_mid": 3.5, 
     "veggie": 4.0, "fruit": 3.0, "fat": 5.5, "salt": 4.0
@@ -17,6 +18,7 @@ KCAL_MAP = {
 
 CONV = {"carbs_g": 60, "protein_g": 35, "veggie_g": 100, "fruit_g": 100, "milk_ml": 240}
 
+# 肉類資料庫
 MEAT_DATABASE = {
     "雞胸肉": "low", "雞腿肉(去皮)": "low", "和尚頭(牛)": "low", "牛腱": "low", 
     "里肌肉(豬)": "low", "鱈魚": "low", "豆腐": "low",
@@ -24,8 +26,13 @@ MEAT_DATABASE = {
     "梅花豬": "mid", "豬絞肉": "mid", "雞腿肉(帶皮)": "mid"
 }
 
+# 蔬菜分類清單
+GREEN_LIST = ["綠花椰", "菠菜", "地瓜葉", "空心菜", "青江菜", "芥藍"]
+OTHER_VEG_LIST = ["櫛瓜", "茄子", "高麗菜", "白花椰", "娃娃菜", "絲瓜", "洋蔥", "雪白菇", "鴻禧菇"]
+
 if 'daily' not in st.session_state:
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
+    st.session_state.veggie_green = 0.0  # 獨立紀錄深綠色份數
     st.session_state.water = 0.0
 
 st.set_page_config(page_title="2710kcal 智慧導航", layout="wide")
@@ -42,10 +49,11 @@ if is_perfect:
 else:
     st.error("🔴 紅燈：熱量偏差過大")
 
+# 顯示各項剩餘份數
 cols = st.columns(7)
 items = [
     ("🍞 主食", "carbs"), ("🥩 低脂肉", "protein_low"), ("🍖 中脂肉", "protein_mid"),
-    ("🥦 蔬菜", "veggie"), ("🍎 水果", "fruit"), ("🥑 油脂", "fat")
+    ("🥦 總蔬菜", "veggie"), ("🍎 水果", "fruit"), ("🥑 油脂", "fat")
 ]
 
 for i, (label, key) in enumerate(items):
@@ -53,8 +61,12 @@ for i, (label, key) in enumerate(items):
     rem = GOALS[key] - current
     cols[i].metric(label, f"剩 {rem:.1f}", delta=f"{current:.1f} 已吃")
 
+# 飲水儀表板
 water_rem = WATER_GOAL - st.session_state.water
 cols[6].metric("💧 飲水", f"剩 {max(0, int(water_rem))}ml", delta=f"{int(st.session_state.water)}ml")
+
+# 深綠色蔬菜達成率顯示
+st.info(f"🍃 深綠色蔬菜進度：已攝取 {st.session_state.veggie_green:.1f} 份 (目標佔總蔬菜的一半：{st.session_state.daily['veggie']/2:.1f} 份)")
 
 # --- 3. 紀錄區 ---
 st.divider()
@@ -79,34 +91,34 @@ with t2:
         if fat_level == "low": st.session_state.daily["protein_low"] += servings
         else: st.session_state.daily["protein_mid"] += servings
         
-        # 自動計算烹調油脂
         f_add = 0.5 if method == "氣炸鍋" else (1.0 if method == "乾煎/油炒" else (3.5 if method == "油炸" else 0.0))
         if outside: f_add += 1.5
         st.session_state.daily["fat"] += f_add
         st.rerun()
 
 with t3:
+    v_name = st.selectbox("選擇蔬菜種類", GREEN_LIST + OTHER_VEG_LIST)
     v_w = st.number_input("熟菜重量 (g)", min_value=0.0, step=50.0)
     if st.button("➕ 紀錄蔬菜"):
-        st.session_state.daily["veggie"] += (v_w / CONV["veggie_g"])
+        servings = v_w / CONV["veggie_g"]
+        st.session_state.daily["veggie"] += servings
+        # 自動判定是否為深綠色
+        if v_name in GREEN_LIST:
+            st.session_state.veggie_green += servings
         st.rerun()
 
 with t4:
-    st.write("### 🥑 獨立項目紀錄")
     col_fat, col_fruit, col_salt = st.columns(3)
-    
     with col_fat:
         f_add_manual = st.number_input("油脂 (份)", min_value=0.0, step=0.5)
         if st.button("➕ 紀錄油脂"):
             st.session_state.daily["fat"] += f_add_manual
             st.rerun()
-
     with col_fruit:
         f_w = st.number_input("水果 (g)", min_value=0.0, step=10.0)
         if st.button("➕ 紀錄水果"):
             st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
             st.rerun()
-
     with col_salt:
         salt_g = st.number_input("鹽巴 (g)", min_value=0.0, step=0.5)
         if st.button("➕ 紀錄鹽分"):
@@ -122,17 +134,19 @@ with t5:
 # --- 4. Excel 結算 ---
 st.divider()
 status_str = "綠燈" if is_perfect else "紅燈"
+# 結算資料中包含深綠色蔬菜份數，方便 Excel 追蹤
 excel_data = [
     datetime.now().strftime("%Y/%m/%d"), str(round(total_kcal)), status_str,
     f"{round(st.session_state.daily['carbs'], 1)}", f"{round(st.session_state.daily['milk'], 1)}",
     f"{round(st.session_state.daily['protein_low'], 1)}", f"{round(st.session_state.daily['protein_mid'], 1)}",
-    f"{round(st.session_state.daily['veggie'], 1)}", f"{round(st.session_state.daily['fruit'], 1)}",
-    f"{round(st.session_state.daily['fat'], 1)}", f"{round(st.session_state.daily['salt'], 1)}",
-    str(round(st.session_state.water))
+    f"{round(st.session_state.daily['veggie'], 1)}", f"{round(st.session_state.veggie_green, 1)}", # 菜/綠菜分開
+    f"{round(st.session_state.daily['fruit'], 1)}", f"{round(st.session_state.daily['fat'], 1)}", 
+    f"{round(st.session_state.daily['salt'], 1)}", str(round(st.session_state.water))
 ]
 st.code("\t".join(excel_data), language="text")
 
 if st.button("🔄 開啟新的一天", use_container_width=True):
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
+    st.session_state.veggie_green = 0.0
     st.session_state.water = 0.0
     st.rerun()
