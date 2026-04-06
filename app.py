@@ -2,79 +2,70 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import base64
 
-# --- 1. 雲端連線設定 (標準 TOML 結構版) ---
+# --- 1. 雲端連線核心 (Base64 穩定版) ---
 def init_sheet():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         
-        # 直接從 Streamlit Secrets 讀取完整的字典
-        creds_dict = st.secrets["gcp_service_account"]
+        # 讀取 Secrets
+        s = st.secrets["gcp_service_account"]
         
-        # 建立憑證
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        # 構建憑證字典
+        info = {
+            "type": s["type"],
+            "project_id": s["project_id"],
+            "private_key_id": s["private_key_id"],
+            "client_email": s["client_email"],
+            "client_id": s["client_id"],
+            "auth_uri": s["auth_uri"],
+            "token_uri": s["token_uri"],
+            "auth_provider_x509_cert_url": s["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": s["client_x509_cert_url"]
+        }
+        
+        # 從 Base64 还原最原始的 Private Key
+        info["private_key"] = base64.b64decode(s["private_key_base64"]).decode("utf-8")
+        
+        creds = Credentials.from_service_account_info(info, scopes=scope)
         client = gspread.authorize(creds)
-        
-        # 開啟試算表 (請確保名稱完全為 MyDietLog)
         return client.open("MyDietLog").sheet1
     except Exception as e:
         return f"❌ 連線失敗: {str(e)}"
 
-# 初始化連線
-sheet_result = init_sheet()
-
-# --- 2. 營養參數 ---
+# --- 2. 營養參數與初始化 ---
 GOALS = {
     "carbs": 16.0, "milk": 3.0, "protein_low": 7.0, "protein_mid": 3.5, 
-    "veggie": 4.0, "veggie_green": 2.0, "fruit": 3.0, "fat": 5.5, 
-    "salt": 4.0, "target_kcal": 2710.0, "target_water": 3000.0
+    "veggie": 4.0, "fruit": 3.0, "fat": 5.5, "salt": 4.0
 }
-
 KCAL_MAP = {
     "carbs": 70, "milk": 150, "protein_low": 55, "protein_mid": 75,
     "veggie": 25, "fruit": 60, "fat": 45
 }
-
-MEAT_DB = {"雞胸肉": "low", "雞腿肉(去皮)": "low", "牛腱": "low", "豆腐": "low", "雞蛋": "mid", "鮭魚": "mid", "梅花豬": "mid"}
-VEG_DB = {"綠花椰": True, "菠菜": True, "地瓜葉": True, "空心菜": True, "高麗菜": False, "絲瓜": False}
 
 if 'daily' not in st.session_state:
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
     st.session_state.water = 0.0
 
 st.set_page_config(page_title="2710kcal 智慧監控", layout="wide")
+sheet_result = init_sheet()
 
-# --- 3. 儀表板 ---
+# --- 3. 畫面顯示 ---
+st.title("🚀 2710kcal 智慧監控")
 total_kcal = sum(st.session_state.daily[k] * KCAL_MAP[k] for k in KCAL_MAP.keys() if k in KCAL_MAP)
 
-st.title("🚀 2710kcal 智慧監控")
-
-c1, c2 = st.columns(2)
-with c1:
-    if 2660 <= total_kcal <= 2710: st.success(f"🟢 完美區間：{total_kcal:.0f} kcal")
-    elif total_kcal > 2710: st.error(f"🔴 已超標：{total_kcal:.0f} kcal")
-    else: st.warning(f"🟡 目前熱量：{total_kcal:.0f} kcal")
-with c2:
-    st.info(f"💧 飲水：{st.session_state.water:.0f} / 3000 ml")
-    st.progress(min(st.session_state.water / 3000, 1.0))
-
-# --- 4. 側邊欄同步 ---
-st.sidebar.header("☁️ 雲端同步中心")
+# 側邊欄：同步狀態
+st.sidebar.header("☁️ 雲端同步")
 if not isinstance(sheet_result, str):
     st.sidebar.success("✅ 雲端已連線")
     if st.sidebar.button("💾 結算並存入 Google"):
         try:
-            status_text = "✅ 達標" if 2660 <= total_kcal <= 2710 else "🔴 未達標"
             row = [
-                datetime.now().strftime("%Y-%m-%d"), round(total_kcal), status_text, 
-                round(st.session_state.daily['carbs'], 1),
-                round(st.session_state.daily['milk'], 1),
-                round(st.session_state.daily['protein_low'], 1),
-                round(st.session_state.daily['protein_mid'], 1),
-                round(st.session_state.daily['veggie'], 1),
-                round(st.session_state.daily['fruit'], 1),
-                round(st.session_state.water),
-                round(st.session_state.daily['salt'], 1)
+                datetime.now().strftime("%Y-%m-%d"), round(total_kcal),
+                "✅ 達標" if 2660 <= total_kcal <= 2710 else "🔴 未達標",
+                *[round(st.session_state.daily[k], 1) for k in GOALS.keys()],
+                round(st.session_state.water)
             ]
             sheet_result.append_row(row)
             st.sidebar.balloons()
@@ -84,53 +75,34 @@ if not isinstance(sheet_result, str):
 else:
     st.sidebar.error(sheet_result)
 
-# --- 5. 份數指標 ---
-st.divider()
-m_cols = st.columns(7)
-metrics = [
-    ("🍞 澱粉", "carbs"), ("🥛 奶類", "milk"), ("🥩 低肉", "protein_low"), 
-    ("🍖 中肉", "protein_mid"), ("🥦 蔬菜", "veggie"), ("🍎 水果", "fruit"), ("🥑 油脂", "fat")
-]
-for i, (label, key) in enumerate(metrics):
-    rem = GOALS[key] - st.session_state.daily[key]
-    m_cols[i].metric(label, f"剩 {rem:.1f}", delta=f"{st.session_state.daily[key]:.1f}")
+# 儀表板
+c1, c2 = st.columns(2)
+with c1:
+    st.metric("總熱量", f"{total_kcal:.0f} / 2710 kcal")
+with c2:
+    st.metric("飲水", f"{st.session_state.water:.0f} / 3000 ml")
 
-# --- 6. 分頁輸入 (略，保持不變) ---
-# ... 此處包含澱粉、肉類、蔬菜等輸入邏輯，請點選按鈕後儲存 ...
-tabs = st.tabs(["🍚 澱粉", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "💧 飲水", "🍎 其他"])
+# 份數監控
+st.divider()
+m_cols = st.columns(4)
+for i, (label, key) in enumerate(GOALS.items()):
+    rem = GOALS[key] - st.session_state.daily[key]
+    m_cols[i % 4].metric(label, f"剩 {rem:.1f}", delta=f"{st.session_state.daily[key]:.1f}")
+
+# --- 4. 輸入區域 ---
+tabs = st.tabs(["🍚 澱粉/奶類", "🥩 肉類/蔬果", "🥤 飲水"])
 with tabs[0]:
-    c_w = st.number_input("熟澱粉重量 (g)", min_value=0.0, step=10.0)
+    cw = st.number_input("澱粉重量 (g)", min_value=0.0, step=10.0)
     if st.button("➕ 儲存澱粉"):
-        st.session_state.daily["carbs"] += (c_w / 60); st.rerun()
+        st.session_state.daily["carbs"] += (cw / 60); st.rerun()
 with tabs[1]:
-    m_ml = st.number_input("奶類 (ml)", min_value=0.0, step=100.0)
-    if st.button("➕ 儲存奶類"):
-        st.session_state.daily["milk"] += (m_ml / 240); st.rerun()
-with tabs[2]:
-    m_name = st.selectbox("選擇肉類", list(MEAT_DB.keys()))
-    m_w = st.number_input("熟肉重量 (g)", min_value=0.0)
-    method = st.selectbox("烹調方式", ["蒸/煮", "煎/炒", "炸"])
-    is_out = st.checkbox("外食加油")
+    mw = st.number_input("肉類重量 (g)", min_value=0.0, step=5.0)
     if st.button("➕ 儲存肉類"):
-        serv = m_w / 35
-        if MEAT_DB[m_name] == "low": st.session_state.daily["protein_low"] += serv
-        else: st.session_state.daily["protein_mid"] += serv
-        f_add = 1.0 if method == "煎/炒" else (3.5 if method == "炸" else 0.0)
-        if is_out: f_add += 1.5
-        st.session_state.daily["fat"] += f_add; st.rerun()
-with tabs[3]:
-    v_name = st.selectbox("蔬菜種類", list(VEG_DB.keys()))
-    v_w = st.number_input("熟菜重量 (g)", min_value=0.0, value=100.0)
-    if st.button("➕ 儲存蔬菜"):
-        st.session_state.daily["veggie"] += (v_w / 100); st.rerun()
-with tabs[4]:
-    w_in = st.number_input("飲水量 (ml)", min_value=0.0, step=50.0, value=250.0)
+        st.session_state.daily["protein_low"] += (mw / 35); st.rerun()
+with tabs[2]:
+    win = st.number_input("飲水 (ml)", min_value=0.0, step=50.0, value=250.0)
     if st.button("🥤 喝水"):
-        st.session_state.water += w_in; st.rerun()
-with tabs[5]:
-    f_w = st.number_input("水果重 (g)", min_value=0.0)
-    if st.button("🍎 儲存水果"):
-        st.session_state.daily["fruit"] += (f_w / 100); st.rerun()
+        st.session_state.water += win; st.rerun()
 
 if st.button("🔄 開啟新的一天", use_container_width=True):
     st.session_state.daily = {k: 0.0 for k in GOALS.keys()}
