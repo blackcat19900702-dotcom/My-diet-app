@@ -58,7 +58,7 @@ cols[6].metric("💧 飲水", f"剩 {max(0, int(water_rem))}ml", delta=f"{int(st
 
 # --- 3. 紀錄區 ---
 st.divider()
-t1, t2, t3, t4, t5 = st.tabs(["🍚 澱粉/奶類", "🥩 肉類", "🥬 蔬菜", "🍎 水果/油脂", "💧 飲水"])
+t1, t2, t3, t4, t5 = st.tabs(["🍚 澱粉/奶類", "🥩 肉類", "🥬 蔬菜", "🍎 水果/油脂/鹽", "💧 飲水"])
 
 with t1:
     c_w = st.number_input("熟主食重量 (g)", min_value=0.0, step=10.0)
@@ -79,6 +79,7 @@ with t2:
         if fat_level == "low": st.session_state.daily["protein_low"] += servings
         else: st.session_state.daily["protein_mid"] += servings
         
+        # 自動計算烹調油脂
         f_add = 0.5 if method == "氣炸鍋" else (1.0 if method == "乾煎/油炒" else (3.5 if method == "油炸" else 0.0))
         if outside: f_add += 1.5
         st.session_state.daily["fat"] += f_add
@@ -91,14 +92,26 @@ with t3:
         st.rerun()
 
 with t4:
-    f_add_manual = st.number_input("手動新增油脂 (份)", min_value=0.0, step=0.5)
-    f_w = st.number_input("水果重量 (g)", min_value=0.0, step=10.0)
-    salt_g = st.number_input("台鹽鹽巴量 (g)", min_value=0.0, step=0.5)
-    if st.button("➕ 紀錄水果/油脂/鹽"):
-        st.session_state.daily["fat"] += f_add_manual
-        st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
-        st.session_state.daily["salt"] += salt_g
-        st.rerun()
+    st.write("### 🥑 獨立項目紀錄")
+    col_fat, col_fruit, col_salt = st.columns(3)
+    
+    with col_fat:
+        f_add_manual = st.number_input("油脂 (份)", min_value=0.0, step=0.5)
+        if st.button("➕ 紀錄油脂"):
+            st.session_state.daily["fat"] += f_add_manual
+            st.rerun()
+
+    with col_fruit:
+        f_w = st.number_input("水果 (g)", min_value=0.0, step=10.0)
+        if st.button("➕ 紀錄水果"):
+            st.session_state.daily["fruit"] += (f_w / CONV["fruit_g"])
+            st.rerun()
+
+    with col_salt:
+        salt_g = st.number_input("鹽巴 (g)", min_value=0.0, step=0.5)
+        if st.button("➕ 紀錄鹽分"):
+            st.session_state.daily["salt"] += salt_g
+            st.rerun()
 
 with t5:
     w_ml = st.number_input("單次飲水量 (ml)", min_value=0.0, step=50.0, value=250.0)
