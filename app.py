@@ -7,7 +7,6 @@ GOALS = {
     "veggie": 4.0, "fruit": 3.0, "fat": 5.5, "salt": 4.0
 }
 
-# 輔助計算熱量 (用於 Excel 統計)
 KCAL_MAP = {
     "carbs": 70, "milk": 150, "protein_low": 55, "protein_mid": 75,
     "veggie": 25, "fruit": 60, "fat": 45, "salt": 0
@@ -15,7 +14,6 @@ KCAL_MAP = {
 
 CONV = {"carbs_g": 60, "protein_g": 35, "veggie_g": 100, "fruit_g": 100, "milk_ml": 240}
 
-# 肉類資料庫
 MEAT_DATABASE = {
     "雞胸肉": "low", "雞腿肉(去皮)": "low", "和尚頭(牛)": "low", "牛腱": "low", 
     "里肌肉(豬)": "low", "鱈魚": "low", "豆腐": "low",
@@ -34,10 +32,7 @@ st.set_page_config(page_title="2710kcal 智慧導航", layout="wide")
 
 # --- 2. 儀表板 ---
 st.title("⚖️ 2710kcal 智慧飲食監控")
-
-# 計算總熱量
 total_kcal = sum(st.session_state.daily[k] * KCAL_MAP.get(k, 0) for k in GOALS.keys())
-
 st.subheader(f"🔥 今日總熱量: {total_kcal:.0f} / 2710 kcal")
 
 cols = st.columns(6)
@@ -49,7 +44,7 @@ items = [
 for i, (label, key) in enumerate(items):
     current = st.session_state.daily[key]
     rem = GOALS[key] - current
-    cols[i].metric(label, f"剩 {rem:.1f} 份", delta=f"{current:.1f} 已攝取")
+    cols[i].metric(label, f"剩 {rem:.1f} 份", delta=f"{current:.1f} 已吃")
 
 # --- 3. 自動化紀錄區 ---
 st.divider()
@@ -66,7 +61,8 @@ with t1:
 with t2:
     m_part = st.selectbox("選擇肉類部位", list(MEAT_DATABASE.keys()))
     m_w = st.number_input("熟肉重量 (g)", min_value=0.0, step=5.0)
-    method = st.selectbox("烹調方式", ["水煮/清蒸", "乾煎/油炒", "油炸"])
+    # 新增氣炸鍋選項
+    method = st.selectbox("烹調方式", ["水煮/清蒸", "氣炸鍋", "乾煎/油炒", "油炸"])
     outside = st.checkbox("這餐是外食")
     
     if st.button("➕ 紀錄肉類"):
@@ -77,7 +73,12 @@ with t2:
         else:
             st.session_state.daily["protein_mid"] += servings
             
-        f_add = 1.0 if method == "乾煎/油炒" else (3.5 if method == "油炸" else 0.0)
+        # 油脂邏輯修正
+        f_add = 0.0
+        if method == "氣炸鍋": f_add = 0.5
+        elif method == "乾煎/油炒": f_add = 1.0
+        elif method == "油炸": f_add = 3.5
+        
         if outside: f_add += 1.5
         st.session_state.daily["fat"] += f_add
         st.rerun()
@@ -104,7 +105,6 @@ st.divider()
 st.subheader("📋 Excel 結算複製貼上")
 
 date_str = datetime.now().strftime("%Y/%m/%d")
-# 依照你要求的順序排好
 excel_data = [
     date_str, 
     str(round(total_kcal)),
@@ -120,7 +120,6 @@ excel_data = [
 ]
 excel_row = "\t".join(excel_data)
 
-st.text("複製下方內容貼入 Excel：")
 st.code(excel_row, language="text")
 
 if st.button("🔄 開啟新的一天", use_container_width=True):
