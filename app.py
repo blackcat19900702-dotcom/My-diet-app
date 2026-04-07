@@ -59,7 +59,7 @@ for i, (label, key) in enumerate(display_items):
 st.divider()
 tabs = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
-# --- Tab 內容 (維持所有智慧功能) ---
+# --- 分頁內容 (保留所有智慧邏輯) ---
 with tabs[0]: # 主食
     c_sel = st.selectbox("選擇主食", list(FIXED_CARBS_REF.keys()))
     to_add = {k: 0.0 for k in KCAL_MAP.keys()}
@@ -81,7 +81,7 @@ with tabs[0]: # 主食
         for k, v in to_add.items(): st.session_state.daily[k] += v
         st.rerun()
 
-with tabs[1]: # 奶類
+with tabs[1]: # 奶類 (預設 LP33)
     m_opt = st.radio("選擇類型", ["LP33 / AB 優酪乳 (預設)", "其他奶類/蛋白質飲品"], horizontal=True)
     if m_opt == "LP33 / AB 優酪乳 (預設)":
         m_ml = st.number_input("飲用量 (ml)", value=240.0)
@@ -94,7 +94,7 @@ with tabs[1]: # 奶類
             else: st.session_state.daily["milk"] += (m_ml / 240)
             st.rerun()
 
-with tabs[2]: # 肉類
+with tabs[2]: # 肉類 (智慧歸類板豆腐、黑豆)
     p_sel = st.selectbox("選擇肉類", list(MEAT_DB.keys()) + ["其他肉類/蛋白質選項"])
     if p_sel == "其他肉類/蛋白質選項":
         p_name = st.text_input("輸入名稱"); p_w = st.number_input("重量 (g)", value=35.0)
@@ -105,7 +105,7 @@ with tabs[2]: # 肉類
             else: st.session_state.daily["protein_high"] += p_w/35
             st.rerun()
     else:
-        p_w = st.number_input("重量 (g)", value=35.0); meth = st.selectbox("烹調法", ["水煮", "氣炸", "油炒", "油炸"]); p_out = st.checkbox("外食肉類 (+1.5 油脂)")
+        p_w = st.number_input("重量 (g)", value=35.0); meth = st.selectbox("烹調", ["水煮", "氣炸", "油炒", "油炸"]); p_out = st.checkbox("外食肉類 (+1.5 油脂)")
         if st.button("➕ 紀錄肉類"):
             st.session_state.daily[f"protein_{MEAT_DB[p_sel]}"] += p_w/35
             f_map = {"水煮":0, "氣炸":0.5, "油炒":1, "油炸":3.5}
@@ -118,43 +118,63 @@ with tabs[3]: # 蔬菜
         if v_n in GREEN_LIST: st.session_state.veggie_green += v_w/100
         st.rerun()
 
-with tabs[4]: # 其他 / 5: 飲水
+with tabs[4]: # 其他
     c1, c2, c3 = st.columns(3); fa = c1.number_input("油脂份"); fr = c2.number_input("水果份"); sa = c3.number_input("鹽(g)")
     if st.button("➕ 紀錄額外項"): st.session_state.daily["fat"]+=fa; st.session_state.daily["fruit"]+=fr; st.session_state.daily["salt"]+=sa; st.rerun()
 with tabs[5]:
     w_val = st.number_input("水量 (ml)", value=250.0)
     if st.button("➕ 記水"): st.session_state.water += w_val; st.rerun()
 
-# --- 6. 結算匯出 (前台顯示標題，複製區僅數據) ---
+# --- 6. 結算匯出 (前台表格 + 一鍵複製按鈕) ---
 st.divider()
 st.subheader("📋 今日數據匯出")
 
-# 計算綠色蔬菜佔比
 green_pct = (st.session_state.veggie_green / st.session_state.daily['veggie'] * 100) if st.session_state.daily['veggie'] > 0 else 0
-
-# 前台對照表 (僅顯示用)
 headers = ["日期", "總熱量", "主食份", "奶類份", "低脂肉", "中脂肉", "總蔬菜", "綠菜佔比", "水果份", "油脂份", "鹽份(g)", "飲水(ml)"]
 data_list = [
-    datetime.now().strftime("%Y/%m/%d"), 
-    str(round(total_kcal)), 
-    f"{st.session_state.daily['carbs']:.1f}", 
-    f"{st.session_state.daily['milk']:.1f}", 
-    f"{st.session_state.daily['protein_low']:.1f}", 
-    f"{st.session_state.daily['protein_mid']:.1f}", 
-    f"{st.session_state.daily['veggie']:.1f}", 
-    f"{green_pct:.1f}%", 
-    f"{st.session_state.daily['fruit']:.1f}", 
-    f"{st.session_state.daily['fat']:.1f}", 
-    f"{st.session_state.daily['salt']:.1f}", 
-    str(round(st.session_state.water))
+    datetime.now().strftime("%Y/%m/%d"), str(round(total_kcal)), 
+    f"{st.session_state.daily['carbs']:.1f}", f"{st.session_state.daily['milk']:.1f}", 
+    f"{st.session_state.daily['protein_low']:.1f}", f"{st.session_state.daily['protein_mid']:.1f}", 
+    f"{st.session_state.daily['veggie']:.1f}", f"{green_pct:.1f}%", 
+    f"{st.session_state.daily['fruit']:.1f}", f"{st.session_state.daily['fat']:.1f}", 
+    f"{st.session_state.daily['salt']:.1f}", str(round(st.session_state.water))
 ]
 
-# 顯示前台表格對照
+# 前台顯示表格供目視確認
 st.table([headers, data_list])
 
-# 複製專區 (僅存放純數據，方便直接貼入 Excel 下一列)
-copy_data_only = "\t".join(data_list)
-st.text_area("👇 僅複製下方純數據 (貼入 Excel)：", value=copy_data_only, height=70)
+# 建立純數據字串 (Tab 分隔)
+copy_data = "\t".join(data_list)
+
+# 使用 HTML/JS 建立一個顯眼的複製按鈕
+copy_button_js = f"""
+    <button onclick="copyToClipboard()" style="
+        width: 100%;
+        padding: 15px;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;">
+        📋 點擊一鍵複製數據列 (直接貼入 Excel)
+    </button>
+
+    <script>
+    function copyToClipboard() {{
+        const text = "{copy_data}";
+        const dummy = document.createElement("textarea");
+        document.body.appendChild(dummy);
+        dummy.value = text;
+        dummy.select();
+        document.execCommand("copy");
+        document.body.removeChild(dummy);
+        alert("數據列已複製！請至 Excel 貼上。");
+    }}
+    </script>
+"""
+st.components.v1.html(copy_button_js, height=80)
 
 if st.button("🔄 重置今日數據"):
     st.session_state.daily = {k: 0.0 for k in KCAL_MAP.keys()}
