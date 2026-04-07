@@ -173,15 +173,35 @@ with tabs[5]:
     w_val = st.number_input("水量 (ml)", value=250.0)
     if st.button("記水"): st.session_state.water += w_val; st.rerun()
 
-# --- 6. 結算匯出 ---
+# --- 6. 結算匯出 (新增中文標題列與綠色蔬菜百分比) ---
 st.divider()
-res_row = [datetime.now().strftime("%Y/%m/%d"), str(round(total_kcal)), 
-           f"{st.session_state.daily['carbs']:.1f}", f"{st.session_state.daily['milk']:.1f}", 
-           f"{st.session_state.daily['protein_low']:.1f}", f"{st.session_state.daily['protein_mid']:.1f}", 
-           f"{st.session_state.daily['veggie']:.1f}", f"{st.session_state.veggie_green:.1f}", 
-           f"{st.session_state.daily['fruit']:.1f}", f"{st.session_state.daily['fat']:.1f}", 
-           f"{st.session_state.daily['salt']:.1f}", str(round(st.session_state.water))]
-st.code("\t".join(res_row))
+st.subheader("📋 Excel 匯出區 (請直接複製兩行)")
+
+# 計算百分比
+green_percent = (st.session_state.veggie_green / st.session_state.daily['veggie'] * 100) if st.session_state.daily['veggie'] > 0 else 0
+
+# 建立中文標題列
+headers = ["日期", "總熱量", "主食份", "奶類份", "低脂肉", "中脂肉", "總蔬菜", "綠菜佔比", "水果份", "油脂份", "鹽份(g)", "飲水(ml)"]
+
+# 建立數據列
+res_row = [
+    datetime.now().strftime("%Y/%m/%d"), 
+    str(round(total_kcal)), 
+    f"{st.session_state.daily['carbs']:.1f}", 
+    f"{st.session_state.daily['milk']:.1f}", 
+    f"{st.session_state.daily['protein_low']:.1f}", 
+    f"{st.session_state.daily['protein_mid']:.1f}", 
+    f"{st.session_state.daily['veggie']:.1f}", 
+    f"{green_percent:.1f}%", # 佔比以百分比顯現
+    f"{st.session_state.daily['fruit']:.1f}", 
+    f"{st.session_state.daily['fat']:.1f}", 
+    f"{st.session_state.daily['salt']:.1f}", 
+    str(round(st.session_state.water))
+]
+
+# 合併輸出
+excel_output = "\t".join(headers) + "\n" + "\t".join(res_row)
+st.code(excel_output)
 
 if st.button("🔄 重置今日數據"):
     st.session_state.daily = {k: 0.0 for k in KCAL_MAP.keys()}
