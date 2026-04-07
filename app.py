@@ -1,6 +1,5 @@
 import streamlit as st
 from datetime import datetime
-import pandas as pd
 
 # --- 1. 核心配額與目標 (2710kcal) ---
 BASE_KCAL = 2710  
@@ -60,7 +59,7 @@ for i, (label, key) in enumerate(display_items):
 st.divider()
 tabs = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
-# --- Tab 內容 (邏輯保持完全一致) ---
+# --- Tab 內容 (維持所有智慧功能) ---
 with tabs[0]: # 主食
     c_sel = st.selectbox("選擇主食", list(FIXED_CARBS_REF.keys()))
     to_add = {k: 0.0 for k in KCAL_MAP.keys()}
@@ -106,8 +105,8 @@ with tabs[2]: # 肉類
             else: st.session_state.daily["protein_high"] += p_w/35
             st.rerun()
     else:
-        p_w = st.number_input("重量 (g)", value=35.0); meth = st.selectbox("烹調", ["水煮", "氣炸", "油炒", "油炸"]); p_out = st.checkbox("外食肉類 (+1.5 油脂)")
-        if st.button("➕ 紀錄固定肉類"):
+        p_w = st.number_input("重量 (g)", value=35.0); meth = st.selectbox("烹調法", ["水煮", "氣炸", "油炒", "油炸"]); p_out = st.checkbox("外食肉類 (+1.5 油脂)")
+        if st.button("➕ 紀錄肉類"):
             st.session_state.daily[f"protein_{MEAT_DB[p_sel]}"] += p_w/35
             f_map = {"水煮":0, "氣炸":0.5, "油炒":1, "油炸":3.5}
             st.session_state.daily["fat"] += f_map[meth] + (1.5 if p_out else 0); st.rerun()
@@ -120,50 +119,42 @@ with tabs[3]: # 蔬菜
         st.rerun()
 
 with tabs[4]: # 其他 / 5: 飲水
-    c1, c2, c3 = st.columns(3); fa = c1.number_input("手動油脂", step=0.5); fr = c2.number_input("水果(份)", step=0.5); sa = c3.number_input("鹽(g)", step=0.5)
-    if st.button("➕ 紀錄油脂/水果/鹽"): st.session_state.daily["fat"]+=fa; st.session_state.daily["fruit"]+=fr; st.session_state.daily["salt"]+=sa; st.rerun()
+    c1, c2, c3 = st.columns(3); fa = c1.number_input("油脂份"); fr = c2.number_input("水果份"); sa = c3.number_input("鹽(g)")
+    if st.button("➕ 紀錄額外項"): st.session_state.daily["fat"]+=fa; st.session_state.daily["fruit"]+=fr; st.session_state.daily["salt"]+=sa; st.rerun()
 with tabs[5]:
     w_val = st.number_input("水量 (ml)", value=250.0)
     if st.button("➕ 記水"): st.session_state.water += w_val; st.rerun()
 
-# --- 6. 結算匯出 (使用 JavaScript 強化一鍵複製) ---
+# --- 6. 結算匯出 (前台顯示標題，複製區僅數據) ---
 st.divider()
-st.subheader("📋 Excel 匯出 (點擊下方按鈕直接複製)")
+st.subheader("📋 今日數據匯出")
 
+# 計算綠色蔬菜佔比
 green_pct = (st.session_state.veggie_green / st.session_state.daily['veggie'] * 100) if st.session_state.daily['veggie'] > 0 else 0
+
+# 前台對照表 (僅顯示用)
 headers = ["日期", "總熱量", "主食份", "奶類份", "低脂肉", "中脂肉", "總蔬菜", "綠菜佔比", "水果份", "油脂份", "鹽份(g)", "飲水(ml)"]
-data = [datetime.now().strftime("%Y/%m/%d"), str(round(total_kcal)), f"{st.session_state.daily['carbs']:.1f}", f"{st.session_state.daily['milk']:.1f}", f"{st.session_state.daily['protein_low']:.1f}", f"{st.session_state.daily['protein_mid']:.1f}", f"{st.session_state.daily['veggie']:.1f}", f"{green_pct:.1f}%", f"{st.session_state.daily['fruit']:.1f}", f"{st.session_state.daily['fat']:.1f}", f"{st.session_state.daily['salt']:.1f}", str(round(st.session_state.water))]
+data_list = [
+    datetime.now().strftime("%Y/%m/%d"), 
+    str(round(total_kcal)), 
+    f"{st.session_state.daily['carbs']:.1f}", 
+    f"{st.session_state.daily['milk']:.1f}", 
+    f"{st.session_state.daily['protein_low']:.1f}", 
+    f"{st.session_state.daily['protein_mid']:.1f}", 
+    f"{st.session_state.daily['veggie']:.1f}", 
+    f"{green_pct:.1f}%", 
+    f"{st.session_state.daily['fruit']:.1f}", 
+    f"{st.session_state.daily['fat']:.1f}", 
+    f"{st.session_state.daily['salt']:.1f}", 
+    str(round(st.session_state.water))
+]
 
-output_text = "\t".join(headers) + "\\n" + "\t".join(data)
+# 顯示前台表格對照
+st.table([headers, data_list])
 
-# 使用 HTML/JS 建立一鍵複製按鈕，完全避開「選取文字」的問題
-copy_button_html = f"""
-    <button onclick="copyToClipboard()" style="
-        padding: 10px 20px;
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 16px;
-        width: 100%;">
-        點我複製 Excel 資料 (含中文標題)
-    </button>
-
-    <script>
-    function copyToClipboard() {{
-        const text = "{output_text}";
-        const el = document.createElement('textarea');
-        el.value = text.replace(/\\\\n/g, '\\n');
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-        alert('資料已成功複製到剪貼簿！可以直接貼上 Excel。');
-    }}
-    </script>
-"""
-st.components.v1.html(copy_button_html, height=100)
+# 複製專區 (僅存放純數據，方便直接貼入 Excel 下一列)
+copy_data_only = "\t".join(data_list)
+st.text_area("👇 僅複製下方純數據 (貼入 Excel)：", value=copy_data_only, height=70)
 
 if st.button("🔄 重置今日數據"):
     st.session_state.daily = {k: 0.0 for k in KCAL_MAP.keys()}
