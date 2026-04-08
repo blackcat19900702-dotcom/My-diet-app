@@ -192,9 +192,54 @@ with tabs[4]:
         if st.button("記鹽"): st.session_state.daily["salt"] += sa; st.rerun()
 
 # --- Tab 5: 飲水 ---
+# --- Tab 5: 飲水 (新增飲料智慧分析) ---
 with tabs[5]:
-    w_val = st.number_input("水量 (ml)", value=250.0)
-    if st.button("記水"): st.session_state.water += w_val; st.rerun()
+    w_type = st.radio("類型", ["純水", "飲料"], horizontal=True)
+    
+    if w_type == "純水":
+        w_val = st.number_input("水量 (ml)", value=250.0, key="pure_water")
+        if st.button("記水"): 
+            st.session_state.water += w_val
+            st.rerun()
+    else:
+        st.info("💡 系統將根據品牌與關鍵字自動分析成分 (例如：五十嵐珍珠奶茶無糖)")
+        drink_name = st.text_input("請輸入飲料完整名稱", placeholder="五十嵐珍珠奶茶無糖")
+        drink_ml = st.number_input("飲用量 (ml)", value=700.0, step=50.0)
+        
+        if st.button("🥤 分析並紀錄飲料"):
+            # 建立飲料熱量分析模型 (份數制)
+            d_carbs = 0.0  # 碳水份數
+            d_fat = 0.0    # 油脂份數
+            d_milk = 0.0   # 奶類份數
+            
+            # 1. 判定基底
+            if "奶茶" in drink_name:
+                d_fat += (drink_ml / 700) * 3.0  # 奶精含植物油
+                d_carbs += (drink_ml / 700) * 1.5
+            elif "拿鐵" in drink_name or "鮮奶茶" in drink_name:
+                d_milk += (drink_ml / 700) * 1.5
+            
+            # 2. 判定配料 (珍珠、波霸熱量極高)
+            if any(k in drink_name for k in ["珍珠", "波霸", "粉圓", "混珠"]):
+                d_carbs += 4.0  # 珍珠約等於 1 碗飯的碳水
+                d_fat += 0.5    # 珍珠通常會泡糖水或有微量油
+                
+            # 3. 判定甜度 (碳水增減)
+            if "全糖" in drink_name: d_carbs += 3.0
+            elif "七分" in drink_name or "少糖" in drink_name: d_carbs += 2.0
+            elif "半糖" in drink_name: d_carbs += 1.5
+            elif "微糖" in drink_name: d_carbs += 0.8
+            elif "無糖" in drink_name: d_carbs += 0.0
+            else: d_carbs += 1.5 # 未註明預設半糖
+            
+            # 更新數據
+            st.session_state.daily["carbs"] += d_carbs
+            st.session_state.daily["fat"] += d_fat
+            st.session_state.daily["milk"] += d_milk
+            st.session_state.water += drink_ml  # 飲料也計入水分攝取量
+            
+            st.success(f"已紀錄『{drink_name}』：估計為主食 {d_carbs:.1f} 份, 油脂 {d_fat:.1f} 份, 奶類 {d_milk:.1f} 份")
+            st.rerun()
 
 # --- 6. 結算匯出 ---
 st.divider()
