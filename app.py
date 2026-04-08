@@ -159,8 +159,8 @@ with tabs[3]:
 with tabs[4]:
     col1, col2, col3 = st.columns(3)
     with col1:
-        fa = st.number_input("手動油脂", step=0.5)
-        if st.button("記油"): st.session_state.daily["fat"] += fa; st.rerun()
+        fa_g = st.number_input("手動油脂 (g)", step=1.0)
+        if st.button("記油"): st.session_state.daily["fat"] += fa_g / 5; st.rerun()
     with col2:
         fr = st.number_input("水果(g)", step=10.0)
         if st.button("記果"): st.session_state.daily["fruit"] += fr/100; st.rerun()
