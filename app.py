@@ -191,8 +191,7 @@ with tabs[4]:
         sa = st.number_input("鹽巴(g)", step=0.5)
         if st.button("記鹽"): st.session_state.daily["salt"] += sa; st.rerun()
 
-# --- Tab 5: 飲水 ---
-# --- Tab 5: 飲水 (新增飲料智慧分析) ---
+# --- Tab 5: 飲水 (新增熱量即時計算顯示) ---
 with tabs[5]:
     w_type = st.radio("類型", ["純水", "飲料"], horizontal=True)
     
@@ -202,43 +201,53 @@ with tabs[5]:
             st.session_state.water += w_val
             st.rerun()
     else:
-        st.info("💡 系統將根據品牌與關鍵字自動分析成分 (例如：五十嵐珍珠奶茶無糖)")
-        drink_name = st.text_input("請輸入飲料完整名稱", placeholder="五十嵐珍珠奶茶無糖")
+        st.info("💡 系統將根據關鍵字自動分析成分與熱量 (範例：五十嵐珍珠奶茶無糖)")
+        drink_name = st.text_input("輸入飲料名稱", key="d_name_input")
         drink_ml = st.number_input("飲用量 (ml)", value=700.0, step=50.0)
         
-        if st.button("🥤 分析並紀錄飲料"):
-            # 建立飲料熱量分析模型 (份數制)
-            d_carbs = 0.0  # 碳水份數
-            d_fat = 0.0    # 油脂份數
-            d_milk = 0.0   # 奶類份數
+        if st.button("🥤 紀錄飲料"):
+            # 1. 份數增量初始化
+            d_carbs = 0.0  
+            d_fat = 0.0    
+            d_milk = 0.0   
             
-            # 1. 判定基底
+            # 容量倍率 (以 700ml 為 1 單位基準)
+            ratio = drink_ml / 700
+            
+            # 2. 判定基底 (奶精或鮮奶)
             if "奶茶" in drink_name:
-                d_fat += (drink_ml / 700) * 3.0  # 奶精含植物油
-                d_carbs += (drink_ml / 700) * 1.5
-            elif "拿鐵" in drink_name or "鮮奶茶" in drink_name:
-                d_milk += (drink_ml / 700) * 1.5
+                d_fat += 3.0 * ratio      # 奶精提供油脂
+                d_carbs += 1.5 * ratio    # 奶精內的碳水
+            elif any(k in drink_name for k in ["拿鐵", "鮮奶茶", "歐蕾"]):
+                d_milk += 1.5 * ratio     # 鮮奶提供奶類份數
             
-            # 2. 判定配料 (珍珠、波霸熱量極高)
+            # 3. 判定配料 (澱粉量)
             if any(k in drink_name for k in ["珍珠", "波霸", "粉圓", "混珠"]):
-                d_carbs += 4.0  # 珍珠約等於 1 碗飯的碳水
-                d_fat += 0.5    # 珍珠通常會泡糖水或有微量油
-                
-            # 3. 判定甜度 (碳水增減)
-            if "全糖" in drink_name: d_carbs += 3.0
-            elif "七分" in drink_name or "少糖" in drink_name: d_carbs += 2.0
-            elif "半糖" in drink_name: d_carbs += 1.5
-            elif "微糖" in drink_name: d_carbs += 0.8
-            elif "無糖" in drink_name: d_carbs += 0.0
-            else: d_carbs += 1.5 # 未註明預設半糖
+                d_carbs += 4.0 * ratio
             
-            # 更新數據
+            # 4. 判定甜度 (砂糖量)
+            if "全糖" in drink_name: d_carbs += 3.0 * ratio
+            elif "半糖" in drink_name: d_carbs += 1.5 * ratio
+            elif "微糖" in drink_name: d_carbs += 0.8 * ratio
+            elif "無糖" in drink_name: d_carbs += 0.0
+            
+            # --- 關鍵：計算這杯飲料的即時熱量 ---
+            # 利用你定義的 KCAL_MAP: carbs=70, milk=150, fat=45
+            this_drink_kcal = (d_carbs * 70) + (d_milk * 150) + (d_fat * 45)
+            
+            # 寫入系統狀態
             st.session_state.daily["carbs"] += d_carbs
             st.session_state.daily["fat"] += d_fat
             st.session_state.daily["milk"] += d_milk
-            st.session_state.water += drink_ml  # 飲料也計入水分攝取量
+            st.session_state.water += drink_ml
             
-            st.success(f"已紀錄『{drink_name}』：估計為主食 {d_carbs:.1f} 份, 油脂 {d_fat:.1f} 份, 奶類 {d_milk:.1f} 份")
+            # 彈出提示顯示計算結果
+            st.success(f"✅ 已紀錄！這杯『{drink_name}』估計熱量為：{this_drink_kcal:.0f} kcal")
+            st.info(f"拆解份數：主食 {d_carbs:.1f} | 奶類 {d_milk:.1f} | 油脂 {d_fat:.1f}")
+            
+            # 延遲一下讓你看清楚熱量再刷新
+            import time
+            time.sleep(2)
             st.rerun()
 
 # --- 6. 結算匯出 ---
