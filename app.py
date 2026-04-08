@@ -178,7 +178,7 @@ st.divider()
 res_row = [datetime.now().strftime("%Y/%m/%d"), str(round(total_kcal)), 
            f"{st.session_state.daily['carbs']:.1f}", f"{st.session_state.daily['milk']:.1f}", 
            f"{st.session_state.daily['protein_low']:.1f}", f"{st.session_state.daily['protein_mid']:.1f}", 
-           f"{st.session_state.daily['veggie']:.1f}", f"{st.session_state.veggie_green:.1f}", 
+           f"{st.session_state.daily['veggie']:.1f}", f"{(st.session_state.veggie_green / 4.0 * 100):.1f}%", 
            f"{st.session_state.daily['fruit']:.1f}", f"{st.session_state.daily['fat']:.1f}", 
            f"{st.session_state.daily['salt']:.1f}", str(round(st.session_state.water))]
 st.code("\t".join(res_row))
