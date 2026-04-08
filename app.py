@@ -69,7 +69,7 @@ for i, (label, key) in enumerate(display_items):
 st.divider()
 tabs = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
-# --- Tab 0: 主食 (含 Tommi 與外食邏輯) ---
+# --- Tab 0: 主食 ---
 with tabs[0]:
     c_sel = st.selectbox("請選擇主食", list(FIXED_CARBS_REF.keys()))
     to_add = {k: 0.0 for k in KCAL_MAP.keys()}
@@ -100,7 +100,7 @@ with tabs[0]:
         for k, v in to_add.items(): st.session_state.daily[k] += v
         st.rerun()
 
-# --- Tab 1: 奶類 (LP33 預設 + 智慧歸類) ---
+# --- Tab 1: 奶類 ---
 with tabs[1]:
     m_opt = st.radio("選擇類型", ["LP33 / AB 優酪乳 (預設)", "其他奶類/蛋白質飲品"], horizontal=True)
     if m_opt == "LP33 / AB 優酪乳 (預設)":
@@ -113,15 +113,13 @@ with tabs[1]:
         if st.button("➕ 分析並紀錄"):
             if "豆漿" in m_name:
                 st.session_state.daily["protein_low"] += (m_ml / 240)
-                st.success(f"已將『{m_name}』歸類至 低脂蛋白質")
             elif "燕麥奶" in m_name:
                 st.session_state.daily["carbs"] += (m_ml / 240) * 2
-                st.success(f"已將『{m_name}』歸類至 主食")
             else:
                 st.session_state.daily["milk"] += (m_ml / 240)
             st.rerun()
 
-# --- Tab 2: 肉類 (含固定部位 + 其他蛋白質判斷) ---
+# --- Tab 2: 肉類 ---
 with tabs[2]:
     p_sel = st.selectbox("選擇肉類/蛋白質", list(MEAT_DB.keys()) + ["其他肉類/蛋白質選項"])
     if p_sel == "其他肉類/蛋白質選項":
@@ -145,14 +143,39 @@ with tabs[2]:
             st.session_state.daily["fat"] += f_map[meth] + (1.5 if p_out else 0)
             st.rerun()
 
-# --- Tab 3: 蔬菜 (綠色蔬菜統計) ---
+# --- Tab 3: 蔬菜 (新增烹調與調味料邏輯) ---
 with tabs[3]:
     v_n = st.selectbox("種類", GREEN_LIST + OTHER_VEG_LIST)
-    v_w = st.number_input("重量 (g)", value=100.0, step=50.0)
+    v_w = st.number_input("重量 (g)", value=100.0, step=50.0, key="v_weight")
+    
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        v_cook = st.selectbox("選單1(料理方式)", ["清燙", "油炒"])
+    with col_v2:
+        v_sauce = st.selectbox("選單2(調味料)", ["無", "新東陽肉醬", "油蔥"])
+    
+    sauce_g = 0.0
+    if v_sauce in ["新東陽肉醬", "油蔥"]:
+        sauce_g = st.number_input(f"{v_sauce} 重量 (g)", min_value=0.0, step=5.0)
+
     if st.button("➕ 紀錄蔬菜"):
+        # 1. 基礎蔬菜份數
         serv = v_w / 100
         st.session_state.daily["veggie"] += serv
         if v_n in GREEN_LIST: st.session_state.veggie_green += serv
+        
+        # 2. 料理方式油脂 (油炒加 1 份)
+        if v_cook == "油炒":
+            st.session_state.daily["fat"] += 1.0
+            
+        # 3. 調味料油脂計算 (換算成份數，1份=5g)
+        if v_sauce == "新東陽肉醬":
+            # 肉醬油脂率約 20% -> sauce_g * 0.2 / 5
+            st.session_state.daily["fat"] += (sauce_g * 0.2) / 5
+        elif v_sauce == "油蔥":
+            # 油蔥油脂率約 60% -> sauce_g * 0.6 / 5
+            st.session_state.daily["fat"] += (sauce_g * 0.6) / 5
+            
         st.rerun()
 
 # --- Tab 4: 其他 ---
