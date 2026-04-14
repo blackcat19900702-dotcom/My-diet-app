@@ -71,25 +71,34 @@ st.divider()
 tabs = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
 # --- Tab 0: 主食 ---
-with tabs[0]: 
-    st.subheader("🍚 主食精準紀錄")
-    food_name = st.text_input("主食名稱", value="白米飯")
-    input_weight = st.number_input("輸入食物重量 (g)", min_value=0.0, step=1.0)
+with tabs[0]: # 主食
+    c_sel = st.selectbox("選擇主食", list(FIXED_CARBS_REF.keys()))
+    to_add_carbs = 0.0
+    
+    if "Tommi" in c_sel:
+        num = st.number_input("數量", min_value=1, step=1)
+        # Tommi 原本標示的碳水大約是 45-50g
+        # 為了精準對齊你的 16 份(341g碳水)，我們直接算出它佔了幾份
+        if "炭香" in c_sel: 
+            # 假設一顆碳水約 48g，則 48 / (341/16) = 2.25 份
+            to_add_carbs = (48.0 / (341/16)) * num 
+        else: 
+            to_add_carbs = (50.0 / (341/16)) * num
+            
+    elif FIXED_CARBS_REF[c_sel] == "CUSTOM":
+        c_w = st.number_input("重量(g)")
+        to_add_carbs = c_w / GRAMS_PER_SERVING # 使用 35.31g 換算
+    else:
+        # 一般米飯、麵條
+        c_w = st.number_input(f"輸入 {c_sel} 重量 (g)")
+        to_add_carbs = c_w / GRAMS_PER_SERVING # 使用 35.31g 換算
 
-    if input_weight > 0:
-        # 1. 計算份數
-        calculated_servings = input_weight / GRAMS_PER_SERVING
-        # 2. 計算熱量 (1份主食 = 70大卡)
-        calculated_kcal = calculated_servings * 70
-        
-        st.info(f"💡 系統換算：{input_weight}g = {calculated_servings:.2f} 份 | 預計熱量：{calculated_kcal:.1f} kcal")
+    # 顯示預覽，讓你知道這重量換算完是多少份
+    st.info(f"📊 換算結果：此筆紀錄佔用 {to_add_carbs:.2f} 份主食額度")
 
-        if st.button("➕ 扣除主食配額"):
-            # 扣除主食份數
-            st.session_state.daily["carbs"] += calculated_servings
-            st.success(f"已從 16 份額度中扣除 {calculated_servings:.2f} 份")
-            st.rerun()
-
+    if st.button("➕ 紀錄主食"):
+        st.session_state.daily["carbs"] += to_add_carbs
+        st.rerun()
 # --- Tab 1: 奶類 ---
 with tabs[1]:
     m_opt = st.radio("選擇類型", ["LP33 / AB 優酪乳 (預設)", "其他奶類/蛋白質飲品"], horizontal=True)
