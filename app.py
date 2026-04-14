@@ -70,35 +70,24 @@ st.divider()
 tabs = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
 # --- Tab 0: 主食 ---
-with tabs[0]:
-    c_sel = st.selectbox("請選擇主食", list(FIXED_CARBS_REF.keys()))
-    to_add = {k: 0.0 for k in KCAL_MAP.keys()}
-    
-    if c_sel == "Tommi 炭香燒肉米漢堡 (固定數據)":
-        num = st.number_input("數量", min_value=1, step=1)
-        to_add["carbs"], to_add["protein_mid"], to_add["fat"] = 3.2*num, 1.3*num, 1.8*num
-    elif c_sel == "Tommi 壽喜燒肉米漢堡 (固定數據)":
-        num = st.number_input("數量", min_value=1, step=1)
-        to_add["carbs"], to_add["protein_mid"], to_add["fat"] = 3.3*num, 1.5*num, 1.0*num
-    elif FIXED_CARBS_REF[c_sel] == "BURGER":
-        col1, col2, col3 = st.columns(3)
-        with col1: b_c = st.number_input("碳水(g)", min_value=0.0)
-        with col2: b_p = st.number_input("蛋白(g)", min_value=0.0)
-        with col3: b_f = st.number_input("脂肪(g)", min_value=0.0)
-        to_add["carbs"], to_add["protein_mid"], to_add["fat"] = b_c/15, b_p/7, b_f/5
-    elif FIXED_CARBS_REF[c_sel] == "CUSTOM":
-        c_n = st.text_input("主食名稱")
-        c_w = st.number_input("重量(g)", min_value=0.0)
-        to_add["carbs"] = c_w / 60
-    else:
-        c_w = st.number_input("重量(g)", min_value=0.0)
-        to_add["carbs"] = c_w / FIXED_CARBS_REF[c_sel]
+with tabs[0]: 
+    st.subheader("🍚 主食精準紀錄")
+    food_name = st.text_input("主食名稱", value="白米飯")
+    input_weight = st.number_input("輸入食物重量 (g)", min_value=0.0, step=1.0)
 
-    if st.checkbox("外食主食 (加 1.5 份油脂)", key="c_out"): to_add["fat"] += 1.5
-    
-    if st.button("➕ 紀錄主食"):
-        for k, v in to_add.items(): st.session_state.daily[k] += v
-        st.rerun()
+    if input_weight > 0:
+        # 1. 計算份數
+        calculated_servings = input_weight / GRAMS_PER_SERVING
+        # 2. 計算熱量 (1份主食 = 70大卡)
+        calculated_kcal = calculated_servings * 70
+        
+        st.info(f"💡 系統換算：{input_weight}g = {calculated_servings:.2f} 份 | 預計熱量：{calculated_kcal:.1f} kcal")
+
+        if st.button("➕ 扣除主食配額"):
+            # 扣除主食份數
+            st.session_state.daily["carbs"] += calculated_servings
+            st.success(f"已從 16 份額度中扣除 {calculated_servings:.2f} 份")
+            st.rerun()
 
 # --- Tab 1: 奶類 ---
 with tabs[1]:
