@@ -71,66 +71,72 @@ st.divider()
 tabs = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
 # --- Tab 0: 主食 ---
+# --- 1. 定義智能數據庫 (每 100g) ---
+NEW_STAPLE_DB = {
+    "大肉包(西大發基準)": {"c": 34.6, "p": 8.7, "f": 9.3},
+    "水煮地瓜": {"c": 27.8, "p": 1.3, "f": 0.2},
+    "氣炸地瓜": {"c": 35.0, "p": 1.6, "f": 0.5}
+}
+
 with tabs[0]: # 主食分頁
-    st.subheader("🍚 主食精準紀錄與分析")
+    st.subheader("🍚 主食紀錄系統 (含智能分析)")
     
-    # 1. 保留原本的清單選擇
-    # 確保 FIXED_CARBS_REF 裡面有 "自定義主食" 這個選項
-    c_sel = st.selectbox("選擇主食種類", list(FIXED_CARBS_REF.keys()))
+    # 整合所有選項：舊清單 + 新增的智能選項
+    STAPLE_OPTIONS = list(FIXED_CARBS_REF.keys()) + list(NEW_STAPLE_DB.keys())
+    c_sel = st.selectbox("選擇主食種類", STAPLE_OPTIONS)
     
-    # 2. 根據選單顯示不同的輸入界面
-    if c_sel == "自定義主食/外食分析":
-        st.markdown("---")
-        st.caption("🔍 請輸入該食物的營養標示或 AI 分析數據")
-        custom_name = st.text_input("食物名稱 (例如：剝皮辣椒肉包)")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            c_carbs = st.number_input("碳水化合物 (g)", min_value=0.0, key="c_c")
-        with col2:
-            c_protein = st.number_input("蛋白質 (g)", min_value=0.0, key="c_p")
-        with col3:
-            c_fat = st.number_input("脂肪 (g)", min_value=0.0, key="c_f")
+    # 初始化要增加的數值
+    to_add_carbs = 0.0
+    to_add_protein = 0.0
+    to_add_fat = 0.0
+    display_kcal = 0.0
 
-        if c_carbs > 0:
-            # 依據 341g/16份 的邏輯換算 (每 21.31g 碳水為 1 份)
-            to_add_carbs = c_carbs / 21.31
-            # 蛋白質換算 (每 7g 為 1 份)
-            to_add_protein = c_protein / 7.0
-            # 脂肪換算 (每 5g 為 1 份)
-            to_add_fat = c_fat / 5.0
+    # --- 邏輯判斷區 ---
+    
+    # A. 智能數據庫選項 (大肉包、地瓜)
+    if c_sel in NEW_STAPLE_DB:
+        c_w = st.number_input(f"輸入 {c_sel} 重量 (g)", min_value=0.0, step=1.0)
+        if c_w > 0:
+            ratio = c_w / 100
+            c_val = NEW_STAPLE_DB[c_sel]["c"] * ratio
+            p_val = NEW_STAPLE_DB[c_sel]["p"] * ratio
+            f_val = NEW_STAPLE_DB[c_sel]["f"] * ratio
             
-            # 計算該食物總熱量
-            item_kcal = (c_carbs * 4) + (c_protein * 4) + (c_fat * 9)
+            to_add_carbs = c_val / 21.31
+            to_add_protein = p_val / 7.0
+            to_add_fat = f_val / 5.0
+            display_kcal = (c_val * 4) + (p_val * 4) + (f_val * 9)
             
-            st.warning(f"💡 分析：佔用主食 {to_add_carbs:.2f} 份 | 蛋白質 {to_add_protein:.1f} 份 | 油脂 {to_add_fat:.1f} 份")
-            st.write(f"🔥 此食物總熱量：{item_kcal:.1f} kcal")
+            st.info(f"⚡ 自動分析：佔主食 {to_add_carbs:.2f} 份 | 蛋白 {to_add_protein:.1f} 份 | 油脂 {to_add_fat:.1f} 份")
+            st.write(f"🔥 預估熱量：{display_kcal:.1f} kcal")
 
-            if st.button("➕ 確認紀錄並扣除全項配額"):
-                st.session_state.daily["carbs"] += to_add_carbs
-                st.session_state.daily["protein_mid"] += to_add_protein
-                st.session_state.daily["fat"] += to_add_fat
-                st.success(f"已紀錄 {custom_name}！")
-                st.rerun()
-
+    # B. Tommi 米漢堡選項 (保留原本功能)
     elif "Tommi" in c_sel:
-        # 這裡保留你原本的 Tommi 米漢堡邏輯
-        num = st.number_input("數量", min_value=1, step=1)
-        if "炭香" in c_sel:
-            to_add = (48.0 / 21.31) * num # 假設米漢堡 48g 碳水
-        else:
-            to_add = (50.0 / 21.31) * num
-        
-        if st.button(f"➕ 紀錄 {num} 顆米漢堡"):
-            st.session_state.daily["carbs"] += to_add
-            st.rerun()
+        num = st.number_input("輸入數量 (顆)", min_value=1, step=1)
+        carb_content = 48.0 if "炭香" in c_sel else 50.0
+        # 假設米漢堡蛋白質 12g, 脂肪 10g (自動補足分析功能)
+        to_add_carbs = (carb_content / 21.31) * num
+        to_add_protein = (12.0 / 7.0) * num
+        to_add_fat = (10.0 / 5.0) * num
+        display_kcal = (carb_content * 4 + 12 * 4 + 10 * 9) * num
+        st.write(f"🍔 {num} 顆佔用：{to_add_carbs:.2f} 份主食")
 
+    # C. 原本的米飯、麵條、其他主食 (保留原本功能)
     else:
-        # 這裡保留你原本的米飯、麵條重量紀錄
-        c_w = st.number_input(f"輸入 {c_sel} 重量 (g)", min_value=0.0)
-        if st.button(f"➕ 紀錄 {c_sel}"):
-            # 依據 565g/16份 的邏輯換算 (每 35.31g 食物重量為 1 份)
-            st.session_state.daily["carbs"] += (c_w / 35.31)
+        c_w = st.number_input(f"輸入 {c_sel} 重量 (g)", min_value=0.0, step=1.0)
+        if c_w > 0:
+            # 依據 565g/16份 邏輯
+            to_add_carbs = c_w / 35.31
+            display_kcal = to_add_carbs * 70
+            st.write(f"🍚 佔用主食額度：{to_add_carbs:.2f} 份")
+
+    # --- 統一紀錄按鈕 ---
+    if st.button(f"➕ 確認紀錄 {c_sel}"):
+        if to_add_carbs > 0:
+            st.session_state.daily["carbs"] += to_add_carbs
+            st.session_state.daily["protein_mid"] += to_add_protein
+            st.session_state.daily["fat"] += to_add_fat
+            st.success("紀錄成功！")
             st.rerun()
 # --- Tab 1: 奶類 ---
 with tabs[1]:
