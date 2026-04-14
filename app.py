@@ -1,17 +1,19 @@
 import streamlit as st
 from datetime import datetime
 
-# --- 1. 核心配額與目標 (2710kcal) ---
+# --- 1. 定義配額目標 (放在 BASE_KCAL 下方) ---
 BASE_KCAL = 2710  
+STAPLE_TOTAL_WEIGHT = 565.0   # 營養師給的總重上限 (g)
+STAPLE_TOTAL_SERVINGS = 16.0  # 營養師給的總份數上限 (份)
+
+# 自動換算出 1 份是多少公克 (35.31g)
+GRAMS_PER_SERVING = STAPLE_TOTAL_WEIGHT / STAPLE_TOTAL_SERVINGS 
+
 GOALS = {
-    "carbs": 16.0, 
-    "milk": 3.0, 
-    "protein_low": 7.0, 
-    "protein_mid": 3.5, 
-    "veggie": 4.0, 
-    "fruit": 3.0, 
-    "fat": 5.5, 
-    "salt": 4.0
+    "carbs": STAPLE_TOTAL_SERVINGS, # 直接對齊 16 份
+    "milk": 3.0, "protein_low": 7.0, 
+    "protein_mid": 3.5, "veggie": 4.0, "fruit": 3.0, 
+    "fat": 5.5, "salt": 4.0
 }
 
 KCAL_MAP = {
