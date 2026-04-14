@@ -24,12 +24,11 @@ KCAL_MAP = {
 
 # --- 2. 資料庫配置 ---
 FIXED_CARBS_REF = {
-    "白米飯 (60g/份)": 60,
-    "五穀米/混合米 (60g/份)": 60,
-    "煮過白麵條 (75g/份)": 75,
-    "Tommi 炭香燒肉米漢堡 (固定數據)": "TOMMI_BBQ",
-    "Tommi 壽喜燒肉米漢堡 (固定數據)": "TOMMI_SUKI",
-    "米漢堡 (手動輸入標示)": "BURGER",
+    "白米飯": GRAMS_PER_SERVING,       # 自動對齊 35.31g
+    "五穀米/混合米": GRAMS_PER_SERVING, # 自動對齊 35.31g
+    "煮過白麵條": GRAMS_PER_SERVING,    # 自動對齊 35.31g
+    "Tommi 炭香燒肉米漢堡": "TOMMI_BBQ",
+    "Tommi 壽喜燒肉米漢堡": "TOMMI_SUKI",
     "其他主食/自定義": "CUSTOM"
 }
 
