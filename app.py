@@ -71,34 +71,67 @@ st.divider()
 tabs = st.tabs(["🍚 主食", "🥛 奶類", "🥩 肉類", "🥬 蔬菜", "🍎 其他/油/鹽", "💧 飲水"])
 
 # --- Tab 0: 主食 ---
-with tabs[0]: # 主食
-    c_sel = st.selectbox("選擇主食", list(FIXED_CARBS_REF.keys()))
-    to_add_carbs = 0.0
+with tabs[0]: # 主食分頁
+    st.subheader("🍚 主食精準紀錄與分析")
     
-    if "Tommi" in c_sel:
-        num = st.number_input("數量", min_value=1, step=1)
-        # Tommi 原本標示的碳水大約是 45-50g
-        # 為了精準對齊你的 16 份(341g碳水)，我們直接算出它佔了幾份
-        if "炭香" in c_sel: 
-            # 假設一顆碳水約 48g，則 48 / (341/16) = 2.25 份
-            to_add_carbs = (48.0 / (341/16)) * num 
-        else: 
-            to_add_carbs = (50.0 / (341/16)) * num
+    # 1. 保留原本的清單選擇
+    # 確保 FIXED_CARBS_REF 裡面有 "自定義主食" 這個選項
+    c_sel = st.selectbox("選擇主食種類", list(FIXED_CARBS_REF.keys()))
+    
+    # 2. 根據選單顯示不同的輸入界面
+    if c_sel == "自定義主食/外食分析":
+        st.markdown("---")
+        st.caption("🔍 請輸入該食物的營養標示或 AI 分析數據")
+        custom_name = st.text_input("食物名稱 (例如：剝皮辣椒肉包)")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            c_carbs = st.number_input("碳水化合物 (g)", min_value=0.0, key="c_c")
+        with col2:
+            c_protein = st.number_input("蛋白質 (g)", min_value=0.0, key="c_p")
+        with col3:
+            c_fat = st.number_input("脂肪 (g)", min_value=0.0, key="c_f")
+
+        if c_carbs > 0:
+            # 依據 341g/16份 的邏輯換算 (每 21.31g 碳水為 1 份)
+            to_add_carbs = c_carbs / 21.31
+            # 蛋白質換算 (每 7g 為 1 份)
+            to_add_protein = c_protein / 7.0
+            # 脂肪換算 (每 5g 為 1 份)
+            to_add_fat = c_fat / 5.0
             
-    elif FIXED_CARBS_REF[c_sel] == "CUSTOM":
-        c_w = st.number_input("重量(g)")
-        to_add_carbs = c_w / GRAMS_PER_SERVING # 使用 35.31g 換算
+            # 計算該食物總熱量
+            item_kcal = (c_carbs * 4) + (c_protein * 4) + (c_fat * 9)
+            
+            st.warning(f"💡 分析：佔用主食 {to_add_carbs:.2f} 份 | 蛋白質 {to_add_protein:.1f} 份 | 油脂 {to_add_fat:.1f} 份")
+            st.write(f"🔥 此食物總熱量：{item_kcal:.1f} kcal")
+
+            if st.button("➕ 確認紀錄並扣除全項配額"):
+                st.session_state.daily["carbs"] += to_add_carbs
+                st.session_state.daily["protein_mid"] += to_add_protein
+                st.session_state.daily["fat"] += to_add_fat
+                st.success(f"已紀錄 {custom_name}！")
+                st.rerun()
+
+    elif "Tommi" in c_sel:
+        # 這裡保留你原本的 Tommi 米漢堡邏輯
+        num = st.number_input("數量", min_value=1, step=1)
+        if "炭香" in c_sel:
+            to_add = (48.0 / 21.31) * num # 假設米漢堡 48g 碳水
+        else:
+            to_add = (50.0 / 21.31) * num
+        
+        if st.button(f"➕ 紀錄 {num} 顆米漢堡"):
+            st.session_state.daily["carbs"] += to_add
+            st.rerun()
+
     else:
-        # 一般米飯、麵條
-        c_w = st.number_input(f"輸入 {c_sel} 重量 (g)")
-        to_add_carbs = c_w / GRAMS_PER_SERVING # 使用 35.31g 換算
-
-    # 顯示預覽，讓你知道這重量換算完是多少份
-    st.info(f"📊 換算結果：此筆紀錄佔用 {to_add_carbs:.2f} 份主食額度")
-
-    if st.button("➕ 紀錄主食"):
-        st.session_state.daily["carbs"] += to_add_carbs
-        st.rerun()
+        # 這裡保留你原本的米飯、麵條重量紀錄
+        c_w = st.number_input(f"輸入 {c_sel} 重量 (g)", min_value=0.0)
+        if st.button(f"➕ 紀錄 {c_sel}"):
+            # 依據 565g/16份 的邏輯換算 (每 35.31g 食物重量為 1 份)
+            st.session_state.daily["carbs"] += (c_w / 35.31)
+            st.rerun()
 # --- Tab 1: 奶類 ---
 with tabs[1]:
     m_opt = st.radio("選擇類型", ["LP33 / AB 優酪乳 (預設)", "其他奶類/蛋白質飲品"], horizontal=True)
